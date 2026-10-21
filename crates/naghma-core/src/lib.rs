@@ -6,3 +6,5 @@
 //! (data-driven) maqam structures.
 //!
 //! This crate is pure computation: no audio I/O, no UI framework, no files.
+
+pub mod pitch;
