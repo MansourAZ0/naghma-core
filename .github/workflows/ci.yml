@@ -49,6 +49,21 @@ jobs:
       - run: cargo clippy --workspace --all-targets --all-features
       - run: cargo doc --workspace --no-deps --all-features
 
+  ui:
+    name: "@naghma/ui"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/naghma-ui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+      - run: npm run typecheck
+      - run: npm test
+
   msrv:
     runs-on: ubuntu-latest
     steps:

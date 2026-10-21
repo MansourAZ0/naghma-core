@@ -8,6 +8,8 @@ real-time pitch-analysis pipeline.
 | [`naghma-core`](crates/naghma-core) | Fixed-Do solfège (Latin & Arabic), quarter-tones, tuning systems, transposition (sounding vs. player pitch), oud instrument models, fingerboard geometry, note tracking, maqam data structures | `serde`, `serde_json` |
 | [`naghma-audio`](crates/naghma-audio) | CPAL microphone capture, lock-free buffering, DSP worker producing `naghma-core` observations; labelled simulation source | `naghma-core`, [`pitchforge`](https://github.com/MansourAZ0/pitchforge-rs), `cpal`, `rtrb` |
 
+| [`@naghma/ui`](packages/naghma-ui) | Shared React rendering: solfège labels, SVG quarter-tone accidentals, live frame store, cents meter | `react` (peer) |
+
 `naghma-core` is UI-framework independent and does no I/O. Applications
 (*watar-tuner*, *Ajnas*) consume these crates instead of copying code from
 each other.
