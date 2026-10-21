@@ -1,0 +1,17 @@
+{
+  "id": "oud-6-course-example",
+  "name": "Oud, 6 courses (example tuning)",
+  "description": "Example profile from the project specification: Do2 – Fa2 – La2 – Re3 – Sol3 – Do4, lowest course single, others doubled. Scale length and fingerboard length are typical values, not measurements of a specific instrument. Adjust to your oud.",
+  "courses": [
+    { "open": "Do2", "strings": 1 },
+    { "open": "Fa2", "strings": 2 },
+    { "open": "La2", "strings": 2 },
+    { "open": "Re3", "strings": 2 },
+    { "open": "Sol3", "strings": 2 },
+    { "open": "Do4", "strings": 2 }
+  ],
+  "scaleLengthMm": 600.0,
+  "fingerboardLengthMm": 300.0,
+  "reference": { "la4Hz": 440.0 },
+  "transposition": { "amount": 0.0, "unit": "semitone" }
+}
