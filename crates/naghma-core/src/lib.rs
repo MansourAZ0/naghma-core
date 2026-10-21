@@ -12,4 +12,5 @@ pub mod instrument;
 pub mod interpret;
 pub mod notation;
 pub mod pitch;
+pub mod tracking;
 pub mod tuning;
