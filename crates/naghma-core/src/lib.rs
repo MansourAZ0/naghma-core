@@ -13,5 +13,6 @@ pub mod interpret;
 pub mod maqam;
 pub mod notation;
 pub mod pitch;
+pub mod preferences;
 pub mod tracking;
 pub mod tuning;
