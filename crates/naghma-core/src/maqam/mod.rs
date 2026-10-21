@@ -19,6 +19,8 @@
 //! * Absolute instrument tuning never appears here; [`Maqam::realize`]
 //!   places a scale on a tonic to obtain spelled notes and pitches.
 
+pub mod analysis;
+
 use crate::notation::{Accidental, Degree, SpelledNote};
 use crate::pitch::Pitch;
 use crate::tuning::{NoteSpelling, Provenance};
@@ -350,7 +352,7 @@ mod tests {
     use super::*;
     use crate::tuning::ProvenanceStatus;
 
-    const FIXTURE: &str = include_str!("../tests/fixtures/synthetic-maqam-dataset.json");
+    const FIXTURE: &str = include_str!("../../tests/fixtures/synthetic-maqam-dataset.json");
 
     fn note(s: &str) -> SpelledNote {
         s.parse().unwrap()
