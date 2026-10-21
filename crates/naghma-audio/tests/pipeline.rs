@@ -47,8 +47,14 @@ fn render(melody: &[(&str, f64)], transposition: Transposition) -> (Vec<f32>, Ve
 }
 
 fn run(samples: &[f32], context: PitchContext) -> Vec<AnalysisFrame> {
-    analyze_samples(samples, SR, AnalysisConfig::default(), TrackerConfig::default(), context)
-        .unwrap()
+    analyze_samples(
+        samples,
+        SR,
+        AnalysisConfig::default(),
+        TrackerConfig::default(),
+        context,
+    )
+    .unwrap()
 }
 
 fn started_player_notes(frames: &[AnalysisFrame]) -> Vec<String> {

@@ -11,7 +11,7 @@ authors.workspace = true
 [dependencies]
 cpal = { version = "0.18", optional = true }
 naghma-core.workspace = true
-pitchforge.workspace = true
+pitchforge = { workspace = true, features = ["signals"] }
 rtrb = "0.4"
 serde = { workspace = true, features = ["derive"] }
 
@@ -19,7 +19,6 @@ serde = { workspace = true, features = ["derive"] }
 workspace = true
 
 [features]
+default = ["cpal"]
+## Live microphone capture via CPAL. Without it only simulation and offline analysis are available.
 cpal = ["dep:cpal"]
-
-[dev-dependencies]
-pitchforge = { git = "https://github.com/MansourAZ0/pitchforge-rs", tag = "v0.1.0", features = ["signals"] }
