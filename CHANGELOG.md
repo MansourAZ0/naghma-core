@@ -5,6 +5,23 @@ All notable changes are documented here ([Keep a Changelog](https://keepachangel
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-21
+
+### naghma-core
+- `maqam::analysis`: rule-based maqam candidate scoring over a rolling
+  note history (fit, foreign notes, coverage, tonic, resting tones, ajnas,
+  phrases), with InsufficientData / Unknown / Ambiguous / Likely status and
+  a possible-modulation flag. Heuristic, data-driven, no built-in maqamat.
+
+### naghma-audio
+- `EngineSession`: shared engine owner for app backends (live reconfigure,
+  restart on source/analysis change).
+- `analyze_wav` example for validating real recordings.
+
+### @naghma/ui (new)
+- Shared React rendering: `NoteName`, `AccidentalGlyph`, `LiveStore`/`useLive`,
+  `CentsMeter`, tuning helpers.
+
 ## [0.1.0] - 2026-10-21
 
 ### naghma-core
