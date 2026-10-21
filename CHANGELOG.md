@@ -5,6 +5,13 @@ All notable changes are documented here ([Keep a Changelog](https://keepachangel
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-21
+
+### naghma-core
+- `preferences::NotationPreferences` (+ `TuningChoice`): shared notation
+  settings with conversions to `PitchContext` / `LabelOptions`.
+- `InstrumentProfile::fingerboard_map`: all playable named notes with positions.
+
 ## [0.2.0] - 2026-10-21
 
 ### naghma-core
