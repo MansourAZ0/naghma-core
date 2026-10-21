@@ -9,3 +9,4 @@
 
 pub mod notation;
 pub mod pitch;
+pub mod tuning;
