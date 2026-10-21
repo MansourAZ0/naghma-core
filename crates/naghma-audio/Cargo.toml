@@ -22,3 +22,6 @@ workspace = true
 default = ["cpal"]
 ## Live microphone capture via CPAL. Without it only simulation and offline analysis are available.
 cpal = ["dep:cpal"]
+
+[dev-dependencies]
+hound = "3.5"
