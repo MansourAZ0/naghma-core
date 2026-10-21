@@ -1,0 +1,16 @@
+[package]
+name = "naghma-audio"
+description = "Real-time pitch analysis pipeline: CPAL microphone capture, lock-free buffering and a DSP worker producing naghma-core observations."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+naghma-core.workspace = true
+pitchforge.workspace = true
+
+[lints]
+workspace = true
