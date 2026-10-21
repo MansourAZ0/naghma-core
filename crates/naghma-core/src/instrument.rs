@@ -227,6 +227,48 @@ impl InstrumentProfile {
     }
 }
 
+/// A named note at a place on the fingerboard.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MappedNote {
+    /// The note in the player's notation.
+    pub note: SpelledNote,
+    /// Player-notation pitch of the target.
+    pub pitch: Pitch,
+    /// Where it is played.
+    pub position: FingerPosition,
+}
+
+impl InstrumentProfile {
+    /// Every target of `tuning` (in player notation) that can be played on
+    /// the fingerboard, with every position where it can be played, sorted
+    /// by course then distance. Computed from geometry and tuning — nothing
+    /// is hard-coded per note.
+    pub fn fingerboard_map(&self, tuning: &impl crate::tuning::TuningSystem) -> Vec<MappedNote> {
+        let (lo, hi) = self.player_range();
+        let mut out: Vec<MappedNote> = tuning
+            .targets_between(lo, hi)
+            .into_iter()
+            .flat_map(|m| {
+                self.positions_for(m.target)
+                    .into_iter()
+                    .map(move |position| MappedNote {
+                        note: m.note,
+                        pitch: m.target,
+                        position,
+                    })
+            })
+            .collect();
+        out.sort_by(|a, b| {
+            a.position
+                .course
+                .cmp(&b.position.course)
+                .then(a.position.distance_mm.total_cmp(&b.position.distance_mm))
+        });
+        out
+    }
+}
+
 /// Invalid instrument data.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
@@ -332,6 +374,26 @@ mod tests {
         let x = p.distance_for_interval(100.0);
         assert!((p.interval_at_distance(x) - 100.0).abs() < 1e-9);
         assert_eq!(p.distance_for_interval(0.0), 0.0);
+    }
+
+    #[test]
+    fn fingerboard_map_covers_each_course_in_quarter_tones() {
+        let p = InstrumentProfile::oud_6_course_example();
+        let map = p.fingerboard_map(&crate::tuning::EqualTemperament::edo24());
+        // 300 mm of a 600 mm string = one octave = 24 quarter-tones + open.
+        for course in 0..6 {
+            let on_course: Vec<_> = map.iter().filter(|m| m.position.course == course).collect();
+            assert_eq!(on_course.len(), 25, "course {course}");
+            assert!(on_course[0].position.is_open());
+            assert_eq!(on_course[0].note, p.courses[course].open);
+        }
+        // Re4 is reachable on the Re3, Sol3 and Do4 courses.
+        let re4: Vec<usize> = map
+            .iter()
+            .filter(|m| m.note == note("Re4"))
+            .map(|m| m.position.course)
+            .collect();
+        assert_eq!(re4, [3, 4, 5]);
     }
 
     #[test]
