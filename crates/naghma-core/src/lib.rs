@@ -7,4 +7,5 @@
 //!
 //! This crate is pure computation: no audio I/O, no UI framework, no files.
 
+pub mod notation;
 pub mod pitch;
