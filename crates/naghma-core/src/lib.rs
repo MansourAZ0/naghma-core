@@ -10,6 +10,7 @@
 pub mod events;
 pub mod instrument;
 pub mod interpret;
+pub mod maqam;
 pub mod notation;
 pub mod pitch;
 pub mod tracking;

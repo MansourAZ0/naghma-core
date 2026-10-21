@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "provenance": {
+    "status": "syntheticTestData",
+    "source": "SYNTHETIC TEST DATA for naghma-core unit tests. Names and structures are invented placeholders and are NOT real maqamat or ajnas.",
+    "version": "test-1"
+  },
+  "ajnas": [
+    {
+      "id": "test-jins-x",
+      "name": { "arabic": "جنس اختبار س", "latin": "TEST jins X" },
+      "degrees": [
+        { "step": 0, "cents": 0 },
+        { "step": 1, "cents": 200 },
+        { "step": 2, "cents": 350 },
+        { "step": 3, "cents": 500 }
+      ]
+    },
+    {
+      "id": "test-jins-y",
+      "name": { "arabic": "جنس اختبار ص", "latin": "TEST jins Y" },
+      "degrees": [
+        { "step": 0, "cents": 0 },
+        { "step": 1, "cents": 100 },
+        { "step": 2, "cents": 400 },
+        { "step": 3, "cents": 500 }
+      ]
+    }
+  ],
+  "maqamat": [
+    {
+      "id": "test-maqam-a",
+      "name": { "arabic": "مقام اختبار أ", "latin": "TEST maqam A" },
+      "tonic": { "degree": "do", "accidental": 0 },
+      "ascending": [
+        { "step": 0, "cents": 0 },
+        { "step": 1, "cents": 200 },
+        { "step": 2, "cents": 350 },
+        { "step": 3, "cents": 500 },
+        { "step": 4, "cents": 700 },
+        { "step": 5, "cents": 900 },
+        { "step": 6, "cents": 1050 },
+        { "step": 7, "cents": 1200 }
+      ],
+      "ajnas": [
+        { "jins": "test-jins-x", "onStep": 0, "role": "lower" },
+        { "jins": "test-jins-x", "onStep": 4, "role": "upper" }
+      ],
+      "restingSteps": [0, 4],
+      "related": ["test-maqam-b"],
+      "modulations": ["test-maqam-b"]
+    },
+    {
+      "id": "test-maqam-b",
+      "name": { "arabic": "مقام اختبار ب", "latin": "TEST maqam B" },
+      "tonic": { "degree": "re", "accidental": 0 },
+      "ascending": [
+        { "step": 0, "cents": 0 },
+        { "step": 1, "cents": 100 },
+        { "step": 2, "cents": 400 },
+        { "step": 3, "cents": 500 },
+        { "step": 4, "cents": 700 }
+      ],
+      "ajnas": [{ "jins": "test-jins-y", "onStep": 0, "role": "lower" }]
+    }
+  ]
+}
