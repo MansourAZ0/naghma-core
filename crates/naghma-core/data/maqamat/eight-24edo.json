@@ -1,0 +1,1313 @@
+{
+  "schemaVersion": 2,
+  "provenance": {
+    "status": "provisional",
+    "source": "Research transcription of the scale illustrations and ajnas described by Johnny Farraj / MaqamWorld, cross-checked with Sami Asmar, Maqamat: Ascending Intervals & Transpositions (https://www.turath.org/Resources/MaqamTrans.htm). Accessed 2026-10-22. Cents are our 24-EDO conversion of written accidentals, NOT measured Arabic performance intonation. This project has not yet obtained musician validation or tested these hypotheses against labelled real performances. Per-entry source URLs are provided.",
+    "version": "eight-24edo-1"
+  },
+  "ajnas": [
+    {
+      "id": "saba",
+      "name": {
+        "latin": "Saba · illustrated span",
+        "arabic": "صبا · النطاق المرسوم"
+      },
+      "degrees": [
+        {
+          "step": 0,
+          "cents": 0
+        },
+        {
+          "step": 1,
+          "cents": 150
+        },
+        {
+          "step": 2,
+          "cents": 300
+        },
+        {
+          "step": 3,
+          "cents": 400
+        },
+        {
+          "step": 4,
+          "cents": 700
+        },
+        {
+          "step": 5,
+          "cents": 800
+        }
+      ],
+      "tonicStep": 0,
+      "sources": [
+        "https://www.maqamworld.com/en/jins/saba.php"
+      ],
+      "description": "Saba has ambiguous size. This six-degree span follows the source illustration; it is not a claim that Saba is a fixed-size hexachord."
+    },
+    {
+      "id": "nahawand",
+      "name": {
+        "latin": "Nahawand",
+        "arabic": "نهاوند"
+      },
+      "degrees": [
+        {
+          "step": 0,
+          "cents": 0
+        },
+        {
+          "step": 1,
+          "cents": 200
+        },
+        {
+          "step": 2,
+          "cents": 300
+        },
+        {
+          "step": 3,
+          "cents": 500
+        },
+        {
+          "step": 4,
+          "cents": 700
+        }
+      ],
+      "tonicStep": 0,
+      "sources": [
+        "https://www.maqamworld.com/en/jins/nahawand.php"
+      ],
+      "description": null
+    },
+    {
+      "id": "ajam",
+      "name": {
+        "latin": "Ajam · five notes",
+        "arabic": "عجم · خمس نغمات"
+      },
+      "degrees": [
+        {
+          "step": 0,
+          "cents": 0
+        },
+        {
+          "step": 1,
+          "cents": 200
+        },
+        {
+          "step": 2,
+          "cents": 400
+        },
+        {
+          "step": 3,
+          "cents": 500
+        },
+        {
+          "step": 4,
+          "cents": 700
+        }
+      ],
+      "tonicStep": 0,
+      "sources": [
+        "https://www.maqamworld.com/en/jins/ajam.php"
+      ],
+      "description": null
+    },
+    {
+      "id": "bayati",
+      "name": {
+        "latin": "Bayati",
+        "arabic": "بياتي"
+      },
+      "degrees": [
+        {
+          "step": 0,
+          "cents": 0
+        },
+        {
+          "step": 1,
+          "cents": 150
+        },
+        {
+          "step": 2,
+          "cents": 300
+        },
+        {
+          "step": 3,
+          "cents": 500
+        }
+      ],
+      "tonicStep": 0,
+      "sources": [
+        "https://www.maqamworld.com/en/jins/bayati.php"
+      ],
+      "description": null
+    },
+    {
+      "id": "sikah",
+      "name": {
+        "latin": "Sikah",
+        "arabic": "سيكاه"
+      },
+      "degrees": [
+        {
+          "step": 0,
+          "cents": 0
+        },
+        {
+          "step": 1,
+          "cents": 150
+        },
+        {
+          "step": 2,
+          "cents": 350
+        }
+      ],
+      "tonicStep": 0,
+      "sources": [
+        "https://www.maqamworld.com/en/jins/sikah.php"
+      ],
+      "description": null
+    },
+    {
+      "id": "hijaz",
+      "name": {
+        "latin": "Hijaz",
+        "arabic": "حجاز"
+      },
+      "degrees": [
+        {
+          "step": 0,
+          "cents": 0
+        },
+        {
+          "step": 1,
+          "cents": 100
+        },
+        {
+          "step": 2,
+          "cents": 400
+        },
+        {
+          "step": 3,
+          "cents": 500
+        }
+      ],
+      "tonicStep": 0,
+      "sources": [
+        "https://www.maqamworld.com/en/jins/hijaz.php"
+      ],
+      "description": "The source describes performance adjustments that narrow the written augmented second. These equal-tempered targets are notation approximations."
+    },
+    {
+      "id": "rast",
+      "name": {
+        "latin": "Rast",
+        "arabic": "راست"
+      },
+      "degrees": [
+        {
+          "step": 0,
+          "cents": 0
+        },
+        {
+          "step": 1,
+          "cents": 200
+        },
+        {
+          "step": 2,
+          "cents": 350
+        },
+        {
+          "step": 3,
+          "cents": 500
+        },
+        {
+          "step": 4,
+          "cents": 700
+        }
+      ],
+      "tonicStep": 0,
+      "sources": [
+        "https://www.maqamworld.com/en/jins/rast.php"
+      ],
+      "description": null
+    },
+    {
+      "id": "kurd",
+      "name": {
+        "latin": "Kurd",
+        "arabic": "كرد"
+      },
+      "degrees": [
+        {
+          "step": 0,
+          "cents": 0
+        },
+        {
+          "step": 1,
+          "cents": 100
+        },
+        {
+          "step": 2,
+          "cents": 300
+        },
+        {
+          "step": 3,
+          "cents": 500
+        }
+      ],
+      "tonicStep": 0,
+      "sources": [
+        "https://www.maqamworld.com/en/jins/kurd.php"
+      ],
+      "description": null
+    },
+    {
+      "id": "upper-rast",
+      "name": {
+        "latin": "Upper Rast",
+        "arabic": "راست علوي"
+      },
+      "degrees": [
+        {
+          "step": 0,
+          "cents": 0
+        },
+        {
+          "step": 1,
+          "cents": 200
+        },
+        {
+          "step": 2,
+          "cents": 350
+        },
+        {
+          "step": 3,
+          "cents": 500
+        }
+      ],
+      "tonicStep": 3,
+      "sources": [
+        "https://www.maqamworld.com/en/jins/upper_rast.php"
+      ],
+      "description": "The tonic is the top note; placement is measured from the lowest note."
+    },
+    {
+      "id": "upper-ajam",
+      "name": {
+        "latin": "Upper Ajam",
+        "arabic": "عجم علوي"
+      },
+      "degrees": [
+        {
+          "step": 0,
+          "cents": 0
+        },
+        {
+          "step": 1,
+          "cents": 200
+        },
+        {
+          "step": 2,
+          "cents": 400
+        },
+        {
+          "step": 3,
+          "cents": 500
+        }
+      ],
+      "tonicStep": 3,
+      "sources": [
+        "https://www.maqamworld.com/en/jins/upper_ajam.php"
+      ],
+      "description": "The tonic is the top note; placement is measured from the lowest note."
+    },
+    {
+      "id": "ajam-three",
+      "name": {
+        "latin": "Ajam · three notes",
+        "arabic": "عجم · ثلاث نغمات"
+      },
+      "degrees": [
+        {
+          "step": 0,
+          "cents": 0
+        },
+        {
+          "step": 1,
+          "cents": 200
+        },
+        {
+          "step": 2,
+          "cents": 400
+        }
+      ],
+      "tonicStep": 0,
+      "sources": [
+        "https://www.maqamworld.com/en/jins/ajam.php"
+      ],
+      "description": "Secondary trichord form, as illustrated for Saba."
+    },
+    {
+      "id": "nikriz",
+      "name": {
+        "latin": "Nikriz",
+        "arabic": "نكريز"
+      },
+      "degrees": [
+        {
+          "step": 0,
+          "cents": 0
+        },
+        {
+          "step": 1,
+          "cents": 200
+        },
+        {
+          "step": 2,
+          "cents": 300
+        },
+        {
+          "step": 3,
+          "cents": 600
+        },
+        {
+          "step": 4,
+          "cents": 700
+        }
+      ],
+      "tonicStep": 0,
+      "sources": [
+        "https://www.maqamworld.com/en/jins/nikriz.php"
+      ],
+      "description": null
+    }
+  ],
+  "maqamat": [
+    {
+      "id": "saba",
+      "name": {
+        "latin": "Saba",
+        "arabic": "صبا"
+      },
+      "tonic": {
+        "degree": "re",
+        "accidental": 0
+      },
+      "ascending": [
+        {
+          "step": 0,
+          "cents": 0
+        },
+        {
+          "step": 1,
+          "cents": 150
+        },
+        {
+          "step": 2,
+          "cents": 300
+        },
+        {
+          "step": 3,
+          "cents": 400
+        },
+        {
+          "step": 4,
+          "cents": 700
+        },
+        {
+          "step": 5,
+          "cents": 800
+        },
+        {
+          "step": 6,
+          "cents": 1000
+        },
+        {
+          "step": 7,
+          "cents": 1100
+        },
+        {
+          "step": 8,
+          "cents": 1400
+        },
+        {
+          "step": 9,
+          "cents": 1500
+        }
+      ],
+      "octaveRepeating": false,
+      "variants": [
+        {
+          "id": "ajam-upper",
+          "name": {
+            "latin": "Ajam upper route",
+            "arabic": "مسار العجم العلوي"
+          },
+          "ascending": [
+            {
+              "step": 0,
+              "cents": 0
+            },
+            {
+              "step": 1,
+              "cents": 150
+            },
+            {
+              "step": 2,
+              "cents": 300
+            },
+            {
+              "step": 3,
+              "cents": 400
+            },
+            {
+              "step": 4,
+              "cents": 700
+            },
+            {
+              "step": 5,
+              "cents": 800
+            },
+            {
+              "step": 6,
+              "cents": 1000
+            },
+            {
+              "step": 7,
+              "cents": 1200
+            }
+          ],
+          "ajnas": [
+            {
+              "jins": "saba",
+              "onStep": 0,
+              "role": "lower"
+            },
+            {
+              "jins": "hijaz",
+              "onStep": 2,
+              "role": "upper"
+            },
+            {
+              "jins": "ajam-three",
+              "onStep": 5,
+              "role": "upper"
+            }
+          ],
+          "sources": [
+            "https://www.maqamworld.com/en/maqam/saba.php"
+          ],
+          "description": "Alternative degree eight is the natural tonic octave. This bounded illustration stops there; no further notes are inferred."
+        }
+      ],
+      "sources": [
+        "https://www.maqamworld.com/en/maqam/saba.php"
+      ],
+      "ajnas": [
+        {
+          "jins": "saba",
+          "onStep": 0,
+          "role": "lower"
+        },
+        {
+          "jins": "hijaz",
+          "onStep": 2,
+          "role": "upper"
+        },
+        {
+          "jins": "nikriz",
+          "onStep": 5,
+          "role": "upper"
+        }
+      ],
+      "restingSteps": [
+        2,
+        5
+      ],
+      "phrases": [],
+      "related": [],
+      "modulations": [],
+      "description": "Source-bounded Nikriz route, including the lowered eighth degree and the distinct upper-register third. It must not be repeated by octaves. Reference tonic: Re."
+    },
+    {
+      "id": "nahawand",
+      "name": {
+        "latin": "Nahawand",
+        "arabic": "نهاوند"
+      },
+      "tonic": {
+        "degree": "do",
+        "accidental": 0
+      },
+      "ascending": [
+        {
+          "step": 0,
+          "cents": 0
+        },
+        {
+          "step": 1,
+          "cents": 200
+        },
+        {
+          "step": 2,
+          "cents": 300
+        },
+        {
+          "step": 3,
+          "cents": 500
+        },
+        {
+          "step": 4,
+          "cents": 700
+        },
+        {
+          "step": 5,
+          "cents": 800
+        },
+        {
+          "step": 6,
+          "cents": 1100
+        },
+        {
+          "step": 7,
+          "cents": 1200
+        }
+      ],
+      "octaveRepeating": true,
+      "variants": [
+        {
+          "id": "kurd-upper",
+          "name": {
+            "latin": "Kurd upper route",
+            "arabic": "مسار الكرد العلوي"
+          },
+          "ascending": [
+            {
+              "step": 0,
+              "cents": 0
+            },
+            {
+              "step": 1,
+              "cents": 200
+            },
+            {
+              "step": 2,
+              "cents": 300
+            },
+            {
+              "step": 3,
+              "cents": 500
+            },
+            {
+              "step": 4,
+              "cents": 700
+            },
+            {
+              "step": 5,
+              "cents": 800
+            },
+            {
+              "step": 6,
+              "cents": 1000
+            },
+            {
+              "step": 7,
+              "cents": 1200
+            }
+          ],
+          "ajnas": [
+            {
+              "jins": "nahawand",
+              "onStep": 0,
+              "role": "lower"
+            },
+            {
+              "jins": "kurd",
+              "onStep": 4,
+              "role": "upper"
+            }
+          ],
+          "sources": [
+            "https://www.maqamworld.com/en/maqam/nahawand.php"
+          ],
+          "description": "The seventh is lowered relative to the primary illustration."
+        }
+      ],
+      "sources": [
+        "https://www.maqamworld.com/en/maqam/nahawand.php"
+      ],
+      "ajnas": [
+        {
+          "jins": "nahawand",
+          "onStep": 0,
+          "role": "lower"
+        },
+        {
+          "jins": "hijaz",
+          "onStep": 4,
+          "role": "upper"
+        }
+      ],
+      "restingSteps": [
+        4
+      ],
+      "phrases": [],
+      "related": [],
+      "modulations": [],
+      "description": "Primary illustration uses Hijaz above the fifth. The Kurd alternative is separate; direction is not imposed as a universal rule. Reference tonic: Do."
+    },
+    {
+      "id": "ajam",
+      "name": {
+        "latin": "Ajam",
+        "arabic": "عجم"
+      },
+      "tonic": {
+        "degree": "do",
+        "accidental": 0
+      },
+      "ascending": [
+        {
+          "step": 0,
+          "cents": 0
+        },
+        {
+          "step": 1,
+          "cents": 200
+        },
+        {
+          "step": 2,
+          "cents": 400
+        },
+        {
+          "step": 3,
+          "cents": 500
+        },
+        {
+          "step": 4,
+          "cents": 700
+        },
+        {
+          "step": 5,
+          "cents": 900
+        },
+        {
+          "step": 6,
+          "cents": 1100
+        },
+        {
+          "step": 7,
+          "cents": 1200
+        }
+      ],
+      "octaveRepeating": true,
+      "variants": [
+        {
+          "id": "nahawand-upper",
+          "name": {
+            "latin": "Nahawand upper route",
+            "arabic": "مسار النهاوند العلوي"
+          },
+          "ascending": [
+            {
+              "step": 0,
+              "cents": 0
+            },
+            {
+              "step": 1,
+              "cents": 200
+            },
+            {
+              "step": 2,
+              "cents": 400
+            },
+            {
+              "step": 3,
+              "cents": 500
+            },
+            {
+              "step": 4,
+              "cents": 700
+            },
+            {
+              "step": 5,
+              "cents": 900
+            },
+            {
+              "step": 6,
+              "cents": 1000
+            },
+            {
+              "step": 7,
+              "cents": 1200
+            }
+          ],
+          "ajnas": [
+            {
+              "jins": "ajam",
+              "onStep": 0,
+              "role": "lower"
+            },
+            {
+              "jins": "nahawand",
+              "onStep": 4,
+              "role": "upper"
+            }
+          ],
+          "sources": [
+            "https://www.maqamworld.com/en/maqam/ajam.php"
+          ],
+          "description": "The alternate upper jins lowers the seventh; shown independently from Upper Ajam."
+        }
+      ],
+      "sources": [
+        "https://www.maqamworld.com/en/maqam/ajam.php"
+      ],
+      "ajnas": [
+        {
+          "jins": "ajam",
+          "onStep": 0,
+          "role": "lower"
+        },
+        {
+          "jins": "upper-ajam",
+          "onStep": 4,
+          "role": "upper"
+        }
+      ],
+      "restingSteps": [
+        4
+      ],
+      "phrases": [],
+      "related": [],
+      "modulations": [],
+      "description": "Egyptian Ajam illustration on Do. Upper Ajam resolves to the octave. A transposition is not automatically the distinct maqam Ajam Ushayran."
+    },
+    {
+      "id": "bayati",
+      "name": {
+        "latin": "Bayati",
+        "arabic": "بياتي"
+      },
+      "tonic": {
+        "degree": "re",
+        "accidental": 0
+      },
+      "ascending": [
+        {
+          "step": 0,
+          "cents": 0
+        },
+        {
+          "step": 1,
+          "cents": 150
+        },
+        {
+          "step": 2,
+          "cents": 300
+        },
+        {
+          "step": 3,
+          "cents": 500
+        },
+        {
+          "step": 4,
+          "cents": 700
+        },
+        {
+          "step": 5,
+          "cents": 800
+        },
+        {
+          "step": 6,
+          "cents": 1000
+        },
+        {
+          "step": 7,
+          "cents": 1200
+        }
+      ],
+      "octaveRepeating": true,
+      "variants": [
+        {
+          "id": "rast-upper",
+          "name": {
+            "latin": "Rast upper route",
+            "arabic": "مسار الراست العلوي"
+          },
+          "ascending": [
+            {
+              "step": 0,
+              "cents": 0
+            },
+            {
+              "step": 1,
+              "cents": 150
+            },
+            {
+              "step": 2,
+              "cents": 300
+            },
+            {
+              "step": 3,
+              "cents": 500
+            },
+            {
+              "step": 4,
+              "cents": 700
+            },
+            {
+              "step": 5,
+              "cents": 850
+            },
+            {
+              "step": 6,
+              "cents": 1000
+            },
+            {
+              "step": 7,
+              "cents": 1200
+            }
+          ],
+          "ajnas": [
+            {
+              "jins": "bayati",
+              "onStep": 0,
+              "role": "lower"
+            },
+            {
+              "jins": "rast",
+              "onStep": 3,
+              "role": "upper"
+            }
+          ],
+          "sources": [
+            "https://www.maqamworld.com/en/maqam/bayati.php"
+          ],
+          "description": "The sixth rises by a notated quarter tone. For Bayati on La this is Fa half-sharp, not Fa half-flat."
+        }
+      ],
+      "sources": [
+        "https://www.maqamworld.com/en/maqam/bayati.php"
+      ],
+      "ajnas": [
+        {
+          "jins": "bayati",
+          "onStep": 0,
+          "role": "lower"
+        },
+        {
+          "jins": "nahawand",
+          "onStep": 3,
+          "role": "upper"
+        }
+      ],
+      "restingSteps": [
+        3
+      ],
+      "phrases": [],
+      "related": [],
+      "modulations": [],
+      "description": "Bayati root with Nahawand above the fourth; Rast is another documented route. Reference tonic Re is a teaching example, not a restriction."
+    },
+    {
+      "id": "sikah",
+      "name": {
+        "latin": "Sikah",
+        "arabic": "سيكاه"
+      },
+      "tonic": {
+        "degree": "mi",
+        "accidental": -1
+      },
+      "ascending": [
+        {
+          "step": 0,
+          "cents": 0
+        },
+        {
+          "step": 1,
+          "cents": 150
+        },
+        {
+          "step": 2,
+          "cents": 350
+        },
+        {
+          "step": 3,
+          "cents": 550
+        },
+        {
+          "step": 4,
+          "cents": 700
+        },
+        {
+          "step": 5,
+          "cents": 850
+        },
+        {
+          "step": 6,
+          "cents": 1050
+        },
+        {
+          "step": 7,
+          "cents": 1200
+        }
+      ],
+      "octaveRepeating": true,
+      "variants": [],
+      "sources": [
+        "https://www.maqamworld.com/en/maqam/sikah.php"
+      ],
+      "ajnas": [
+        {
+          "jins": "sikah",
+          "onStep": 0,
+          "role": "lower"
+        },
+        {
+          "jins": "upper-rast",
+          "onStep": 2,
+          "role": "upper"
+        },
+        {
+          "jins": "rast",
+          "onStep": 5,
+          "role": "upper"
+        }
+      ],
+      "restingSteps": [
+        2,
+        5
+      ],
+      "phrases": [],
+      "related": [],
+      "modulations": [],
+      "description": "Plain Sikah illustration, not Huzam. The source describes it as a rare member of the family. Upper Rast spans the third to sixth degrees with its tonic at the sixth. Reference tonic: Mi half-flat."
+    },
+    {
+      "id": "hijaz",
+      "name": {
+        "latin": "Hijaz",
+        "arabic": "حجاز"
+      },
+      "tonic": {
+        "degree": "re",
+        "accidental": 0
+      },
+      "ascending": [
+        {
+          "step": 0,
+          "cents": 0
+        },
+        {
+          "step": 1,
+          "cents": 100
+        },
+        {
+          "step": 2,
+          "cents": 400
+        },
+        {
+          "step": 3,
+          "cents": 500
+        },
+        {
+          "step": 4,
+          "cents": 700
+        },
+        {
+          "step": 5,
+          "cents": 800
+        },
+        {
+          "step": 6,
+          "cents": 1000
+        },
+        {
+          "step": 7,
+          "cents": 1200
+        }
+      ],
+      "octaveRepeating": true,
+      "variants": [
+        {
+          "id": "rast-upper",
+          "name": {
+            "latin": "Rast upper route",
+            "arabic": "مسار الراست العلوي"
+          },
+          "ascending": [
+            {
+              "step": 0,
+              "cents": 0
+            },
+            {
+              "step": 1,
+              "cents": 100
+            },
+            {
+              "step": 2,
+              "cents": 400
+            },
+            {
+              "step": 3,
+              "cents": 500
+            },
+            {
+              "step": 4,
+              "cents": 700
+            },
+            {
+              "step": 5,
+              "cents": 850
+            },
+            {
+              "step": 6,
+              "cents": 1000
+            },
+            {
+              "step": 7,
+              "cents": 1200
+            }
+          ],
+          "ajnas": [
+            {
+              "jins": "hijaz",
+              "onStep": 0,
+              "role": "lower"
+            },
+            {
+              "jins": "rast",
+              "onStep": 3,
+              "role": "upper"
+            }
+          ],
+          "sources": [
+            "https://www.maqamworld.com/en/maqam/hijaz.php"
+          ],
+          "description": "The sixth rises by a notated quarter tone compared with the Nahawand route."
+        }
+      ],
+      "sources": [
+        "https://www.maqamworld.com/en/maqam/hijaz.php"
+      ],
+      "ajnas": [
+        {
+          "jins": "hijaz",
+          "onStep": 0,
+          "role": "lower"
+        },
+        {
+          "jins": "nahawand",
+          "onStep": 3,
+          "role": "upper"
+        }
+      ],
+      "restingSteps": [
+        3
+      ],
+      "phrases": [],
+      "related": [],
+      "modulations": [],
+      "description": "Hijaz root with Nahawand above the fourth. Rast is a documented alternative. Written semitones and augmented seconds approximate performance intonation. Reference tonic: Re."
+    },
+    {
+      "id": "rast",
+      "name": {
+        "latin": "Rast",
+        "arabic": "راست"
+      },
+      "tonic": {
+        "degree": "do",
+        "accidental": 0
+      },
+      "ascending": [
+        {
+          "step": 0,
+          "cents": 0
+        },
+        {
+          "step": 1,
+          "cents": 200
+        },
+        {
+          "step": 2,
+          "cents": 350
+        },
+        {
+          "step": 3,
+          "cents": 500
+        },
+        {
+          "step": 4,
+          "cents": 700
+        },
+        {
+          "step": 5,
+          "cents": 900
+        },
+        {
+          "step": 6,
+          "cents": 1050
+        },
+        {
+          "step": 7,
+          "cents": 1200
+        }
+      ],
+      "octaveRepeating": true,
+      "variants": [
+        {
+          "id": "nahawand-upper",
+          "name": {
+            "latin": "Nahawand upper route",
+            "arabic": "مسار النهاوند العلوي"
+          },
+          "ascending": [
+            {
+              "step": 0,
+              "cents": 0
+            },
+            {
+              "step": 1,
+              "cents": 200
+            },
+            {
+              "step": 2,
+              "cents": 350
+            },
+            {
+              "step": 3,
+              "cents": 500
+            },
+            {
+              "step": 4,
+              "cents": 700
+            },
+            {
+              "step": 5,
+              "cents": 900
+            },
+            {
+              "step": 6,
+              "cents": 1000
+            },
+            {
+              "step": 7,
+              "cents": 1200
+            }
+          ],
+          "ajnas": [
+            {
+              "jins": "rast",
+              "onStep": 0,
+              "role": "lower"
+            },
+            {
+              "jins": "nahawand",
+              "onStep": 4,
+              "role": "upper"
+            }
+          ],
+          "sources": [
+            "https://www.maqamworld.com/en/maqam/rast.php"
+          ],
+          "description": "The seventh is lowered relative to Upper Rast. The source illustrates this in descent without imposing an absolute direction rule."
+        }
+      ],
+      "sources": [
+        "https://www.maqamworld.com/en/maqam/rast.php"
+      ],
+      "ajnas": [
+        {
+          "jins": "rast",
+          "onStep": 0,
+          "role": "lower"
+        },
+        {
+          "jins": "upper-rast",
+          "onStep": 4,
+          "role": "upper"
+        }
+      ],
+      "restingSteps": [
+        4
+      ],
+      "phrases": [],
+      "related": [],
+      "modulations": [],
+      "description": "Root Rast followed by Upper Rast resolving to the octave. The Nahawand upper route is distinct. Reference tonic: Do."
+    },
+    {
+      "id": "kurd",
+      "name": {
+        "latin": "Kurd",
+        "arabic": "كرد"
+      },
+      "tonic": {
+        "degree": "re",
+        "accidental": 0
+      },
+      "ascending": [
+        {
+          "step": 0,
+          "cents": 0
+        },
+        {
+          "step": 1,
+          "cents": 100
+        },
+        {
+          "step": 2,
+          "cents": 300
+        },
+        {
+          "step": 3,
+          "cents": 500
+        },
+        {
+          "step": 4,
+          "cents": 700
+        },
+        {
+          "step": 5,
+          "cents": 800
+        },
+        {
+          "step": 6,
+          "cents": 1000
+        },
+        {
+          "step": 7,
+          "cents": 1200
+        }
+      ],
+      "octaveRepeating": true,
+      "variants": [],
+      "sources": [
+        "https://www.maqamworld.com/en/maqam/kurd.php"
+      ],
+      "ajnas": [
+        {
+          "jins": "kurd",
+          "onStep": 0,
+          "role": "lower"
+        },
+        {
+          "jins": "nahawand",
+          "onStep": 3,
+          "role": "upper"
+        }
+      ],
+      "restingSteps": [
+        3
+      ],
+      "phrases": [],
+      "related": [],
+      "modulations": [],
+      "description": "Kurd root followed by Nahawand above the fourth. Reference tonic: Re."
+    }
+  ]
+}
