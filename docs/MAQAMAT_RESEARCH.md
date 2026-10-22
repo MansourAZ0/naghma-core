@@ -76,7 +76,9 @@ Direction-dependent examples are offered as alternatives; the engine does not
 claim to recognize melodic direction or an entire maqam from a scale alone.
 
 Alternative formulas are ranked independently, with the selected formula named
-in the result. They are not unioned into one permissive scale. Saba scoring uses
+in the result. They are not unioned into one permissive scale. A real performance
+may use several valid routes, so distance from one illustration does not establish
+that a note is foreign to the maqam. Saba scoring uses
 absolute register-aware distances and reports the inferred tonic octave.
 Other illustrated formulas use pitch classes for the existing heuristic scorer.
 

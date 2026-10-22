@@ -35,8 +35,10 @@ frequency ──► Pitch (continuous, never rounded)
   can place targets anywhere.
 * **Octaves follow spelling.** *Do half-flat 4* sounds below Do4 but is
   written in octave 4.
-* **No invented maqam data.** The maqam module is a schema plus a
-  validating loader. Datasets must declare provenance.
+* **Sourced, provisional maqam illustrations.** The validating maqam loader
+  requires provenance. Optional eight-maqam teaching data follows documented
+  notation, with independent alternatives and nonperiodic Saba registers.
+  Numeric targets approximate written notation in 24-EDO, not exact intonation.
 
 ## Example
 
@@ -64,12 +66,36 @@ cargo run --release -p naghma-audio --example listen -- 10              # microp
 cargo run --release -p naghma-audio --example listen -- 10 --simulate   # synthetic, labelled
 ```
 
+## Sourced maqam reference
+
+`MaqamDataset::teaching_eight_24edo()` returns opt-in source-labelled illustrations
+of Saba, Nahawand, Ajam, Bayati, Sikah, Hijaz, Rast and Kurd. See the
+[research record](docs/MAQAMAT_RESEARCH.md) for source links and limits. Schema 2
+keeps upper-jins tonal centres, alternatives and octave periodicity explicit;
+legacy schema-1 JSON remains supported.
+
+```rust
+use naghma_core::maqam::MaqamDataset;
+let data = MaqamDataset::teaching_eight_24edo();
+let bayati = data.maqam("bayati").unwrap();
+let notes = bayati.realize_variant("La3".parse().unwrap(), Some("rast-upper")).unwrap();
+assert_eq!(notes[5].note.to_string(), "Fa𝄲4");
+```
+
+An [interactive tonic reference](docs/reference/maqamat-tonics.html) embeds data
+exported by the Rust spelling API, including all 24 tonic classes. Its source
+values can be regenerated with:
+
+```sh
+cargo run -p naghma-core --release --example export_maqam_reference
+```
+
 ## Using from another repository
 
 ```toml
 [dependencies]
-naghma-core  = { git = "https://github.com/MansourAZ0/naghma-core", tag = "v0.1.0" }
-naghma-audio = { git = "https://github.com/MansourAZ0/naghma-core", tag = "v0.1.0" }
+naghma-core  = { git = "https://github.com/MansourAZ0/naghma-core", tag = "v0.4.0" }
+naghma-audio = { git = "https://github.com/MansourAZ0/naghma-core", tag = "v0.4.0" }
 ```
 
 For local development against sibling checkouts, create a gitignored
