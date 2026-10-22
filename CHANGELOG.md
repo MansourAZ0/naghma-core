@@ -5,6 +5,12 @@ All notable changes are documented here ([Keep a Changelog](https://keepachangel
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-10-22
+
+- Reject corrected fingerboard positions behind the nut and non-finite positions.
+- Validate calibration so the corrected endpoint remains within the vibrating string.
+- Add regressions for negative offsets and invalid corrected geometry.
+
 ## [0.3.0] - 2026-10-21
 
 ### naghma-core

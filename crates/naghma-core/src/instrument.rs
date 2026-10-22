@@ -145,6 +145,14 @@ impl InstrumentProfile {
         if self.courses.iter().any(|c| !c.adjustment_cents.is_finite()) {
             return err("invalid course adjustment");
         }
+        let corrected_end = self.fingerboard_length_mm - self.calibration.position_offset_mm;
+        if !self.calibration.position_offset_mm.is_finite()
+            || !(corrected_end > 0.0 && corrected_end < self.scale_length_mm)
+        {
+            return err(
+                "calibration must leave the corrected fingerboard end within the vibrating string",
+            );
+        }
         Ok(())
     }
 
@@ -202,7 +210,9 @@ impl InstrumentProfile {
                 }
                 let cents = cents.max(0.0);
                 let distance_mm = self.distance_for_interval(cents);
-                (distance_mm <= self.fingerboard_length_mm).then(|| FingerPosition {
+                (distance_mm.is_finite()
+                    && (0.0..=self.fingerboard_length_mm).contains(&distance_mm))
+                .then(|| FingerPosition {
                     course,
                     distance_mm,
                     fraction: distance_mm / self.scale_length_mm,
@@ -411,5 +421,27 @@ mod tests {
         assert!(bad.validate().is_err());
         let json = serde_json::to_string(&p).unwrap();
         assert_eq!(serde_json::from_str::<InstrumentProfile>(&json).unwrap(), p);
+    }
+
+    #[test]
+    fn corrected_positions_stay_on_the_physical_fingerboard() {
+        let mut p = InstrumentProfile::oud_6_course_example();
+        p.calibration.position_offset_mm = -20.0;
+        p.validate().unwrap();
+        // A quarter-tone above the open course would require a negative
+        // stopping distance after correction. It is not a playable position.
+        let target = Pitch(p.open_player_pitch(3).0 + 0.5);
+        assert!(p.positions_for(target).iter().all(|q| q.course != 3));
+        assert!(
+            p.fingerboard_map(&crate::tuning::EqualTemperament::edo24())
+                .iter()
+                .all(|m| m.position.distance_mm >= 0.0 && m.position.distance_mm.is_finite())
+        );
+        p.fingerboard_length_mm = 590.0;
+        assert!(p.validate().is_err());
+        p.calibration.position_offset_mm = f64::NAN;
+        assert!(p.validate().is_err());
+        p.calibration.position_offset_mm = 590.0;
+        assert!(p.validate().is_err());
     }
 }
