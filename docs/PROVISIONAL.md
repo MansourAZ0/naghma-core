@@ -15,13 +15,19 @@ require changing algorithms.
 | Example oud profile | Do2 Fa2 La2 Re3 Sol3 Do4, lowest course single; 600 mm scale, 300 mm fingerboard | `data/instruments/oud-6-course-example.json` |
 | Transposition unit | "−1/−2" read as semitones by default; unit is stored explicitly and can be whole tones | `pitch.rs` `Transposition` |
 
-## Missing data (to be supplied)
+## Sourced teaching data
 
-* Maqam definitions (scales, ajnas, resting tones, phrases, modulations).
-* Jins definitions.
+The optional `MaqamDataset::teaching_eight_24edo()` dataset now provides sourced
+illustrations for eight maqamat, including documented upper-jins alternatives.
+It remains provisional: see [MAQAMAT_RESEARCH.md](MAQAMAT_RESEARCH.md). No exact
+performance intonation or real-recording validation is claimed.
+
+## Data still needed
+
+* Musician validation and richer maqam definitions (sayr, phrases, modulations).
+* Musician validation of the source-derived jins illustrations.
 * Intonation profiles for maqam performance (non-24-EDO targets).
 * Context-dependent enharmonic spelling rules per maqam.
 
-Until supplied, the only maqam dataset is
-`crates/naghma-core/tests/fixtures/synthetic-maqam-dataset.json`, marked
-`syntheticTestData` with placeholder names.
+The synthetic fixture remains for code-path tests only; it is separate from the
+sourced teaching dataset and must never be presented as real theory.

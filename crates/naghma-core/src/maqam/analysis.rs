@@ -203,6 +203,10 @@ pub struct MaqamCandidate {
     pub maqam: String,
     /// Tonic assumed for this candidate.
     pub tonic: NoteSpelling,
+    /// Selected alternative illustration; `None` means the primary formula.
+    pub variant: Option<String>,
+    /// Explicit anchor register for nonperiodic illustrations.
+    pub tonic_octave: Option<i8>,
     /// Heuristic score (higher fits better; not a probability).
     pub score: f64,
     /// Supporting evidence.
@@ -393,7 +397,32 @@ fn rank(
             None => candidate_tonics(notes, None),
         };
         for t in tonics {
-            out.push(score(notes, dataset, maqam, t, config));
+            for variant in
+                std::iter::once(None).chain(maqam.variants.iter().map(|v| Some(v.id.as_str())))
+            {
+                if maqam.octave_repeating {
+                    out.push(score(notes, dataset, maqam, t, variant, None, config));
+                } else {
+                    let low = notes.iter().map(|n| n.pitch).fold(f64::INFINITY, f64::min);
+                    let high = notes
+                        .iter()
+                        .map(|n| n.pitch)
+                        .fold(f64::NEG_INFINITY, f64::max);
+                    let first = ((low / 12.0).floor() as i32 - 3).max(-128);
+                    let last = ((high / 12.0).floor() as i32).min(125);
+                    for octave in first..=last {
+                        out.push(score(
+                            notes,
+                            dataset,
+                            maqam,
+                            t,
+                            variant,
+                            Some(octave as i8),
+                            config,
+                        ));
+                    }
+                }
+            }
         }
     }
     out.sort_by(|a, b| b.score.total_cmp(&a.score));
@@ -416,8 +445,17 @@ fn circ(a: f64, b: f64) -> f64 {
     d.min(1200.0 - d)
 }
 
-fn scale_classes(degrees: &[ScaleDegree]) -> Vec<f64> {
-    let mut v: Vec<f64> = degrees.iter().map(|d| d.cents.rem_euclid(1200.0)).collect();
+fn scale_classes(degrees: &[ScaleDegree], repeating: bool) -> Vec<f64> {
+    let mut v: Vec<f64> = degrees
+        .iter()
+        .map(|d| {
+            if repeating {
+                d.cents.rem_euclid(1200.0)
+            } else {
+                d.cents
+            }
+        })
+        .collect();
     v.sort_by(f64::total_cmp);
     v.dedup_by(|a, b| (*a - *b).abs() < 1.0);
     v
@@ -428,17 +466,35 @@ fn score(
     dataset: &MaqamDataset,
     maqam: &Maqam,
     tonic: NoteSpelling,
+    variant: Option<&str>,
+    tonic_octave: Option<i8>,
     config: &AnalyzerConfig,
 ) -> MaqamCandidate {
     let w = config.weights;
-    let tonic_cents = tonic.quarter_tone_class() as f64 * 50.0;
-    let rel = |n: &HistoryNote| (n.pitch * 100.0 - tonic_cents).rem_euclid(1200.0);
-
-    let mut degrees: Vec<ScaleDegree> = maqam.ascending.clone();
-    if let Some(desc) = &maqam.descending {
-        degrees.extend(desc.iter().copied());
+    let repeating = maqam.octave_repeating;
+    let tonic_cents = tonic_octave.map_or_else(
+        || tonic.quarter_tone_class() as f64 * 50.0,
+        |octave| {
+            crate::notation::SpelledNote::new(tonic.degree, tonic.accidental, octave)
+                .nominal_pitch()
+                .0
+                * 100.0
+        },
+    );
+    let normalize = |c: f64| if repeating { c.rem_euclid(1200.0) } else { c };
+    let distance = |a: f64, b: f64| if repeating { circ(a, b) } else { (a - b).abs() };
+    let rel = |n: &HistoryNote| normalize(n.pitch * 100.0 - tonic_cents);
+    let scale = maqam.scale(variant).expect("variant comes from this maqam");
+    let placements = maqam
+        .placements(variant)
+        .expect("variant comes from this maqam");
+    let mut degrees = scale.to_vec();
+    if variant.is_none() {
+        if let Some(desc) = &maqam.descending {
+            degrees.extend(desc.iter().copied());
+        }
     }
-    let classes = scale_classes(&degrees);
+    let classes = scale_classes(&degrees, repeating);
     let total_time: f64 = notes.iter().map(|n| n.duration_s.max(0.05)).sum();
 
     let mut in_time = 0.0;
@@ -452,13 +508,13 @@ fn score(
         let nearest = classes
             .iter()
             .enumerate()
-            .map(|(i, &c)| (i, circ(r, c)))
+            .map(|(i, &c)| (i, distance(r, c)))
             .min_by(|a, b| a.1.total_cmp(&b.1));
         match nearest {
             Some((i, d)) if d <= config.tolerance_cents => {
                 in_time += t;
                 heard[i] = true;
-                if circ(r, 0.0) <= config.tolerance_cents {
+                if distance(r, 0.0) <= config.tolerance_cents {
                     tonic_time += t;
                 }
             }
@@ -484,20 +540,20 @@ fn score(
         .iter()
         .rev()
         .find(|n| n.duration_s >= median)
-        .is_some_and(|n| circ(rel(n), 0.0) <= config.tolerance_cents);
+        .is_some_and(|n| distance(rel(n), 0.0) <= config.tolerance_cents);
 
     let resting: Vec<f64> = maqam
         .resting_steps
         .iter()
-        .filter_map(|s| maqam.ascending.iter().find(|d| d.step == *s))
-        .map(|d| d.cents.rem_euclid(1200.0))
+        .filter_map(|s| scale.iter().find(|d| d.step == *s))
+        .map(|d| normalize(d.cents))
         .collect();
     let resting_time: f64 = notes
         .iter()
         .filter(|n| {
             resting
                 .iter()
-                .any(|&c| circ(rel(n), c) <= config.tolerance_cents)
+                .any(|&c| distance(rel(n), c) <= config.tolerance_cents)
         })
         .map(|n| n.duration_s.max(0.05))
         .sum();
@@ -527,24 +583,24 @@ fn score(
     // Ajnas completeness.
     let mut ajnas_score = 0.0;
     let mut ajnas_count = 0;
-    for p in &maqam.ajnas {
+    for p in placements {
         let Some(jins) = dataset.jins(&p.jins) else {
             continue;
         };
-        let Some(base) = maqam.ascending.iter().find(|d| d.step == p.on_step) else {
+        let Some(base) = scale.iter().find(|d| d.step == p.on_step) else {
             continue;
         };
         let jins_classes: Vec<f64> = jins
             .degrees
             .iter()
-            .map(|d| (base.cents + d.cents).rem_euclid(1200.0))
+            .map(|d| normalize(base.cents + d.cents))
             .collect();
         let got = jins_classes
             .iter()
             .filter(|&&c| {
                 notes
                     .iter()
-                    .any(|n| circ(rel(n), c) <= config.tolerance_cents)
+                    .any(|n| distance(rel(n), c) <= config.tolerance_cents)
             })
             .count();
         let completeness = got as f64 / jins_classes.len().max(1) as f64;
@@ -564,10 +620,15 @@ fn score(
     // Phrases: subsequence of scale steps (tonic-relative) in the melody.
     let step_of = |n: &HistoryNote| -> Option<i32> {
         let r = n.pitch * 100.0 - tonic_cents;
+        if !repeating {
+            return scale
+                .iter()
+                .find(|d| (r - d.cents).abs() <= config.tolerance_cents)
+                .map(|d| i32::from(d.step));
+        }
         let octave = (r / 1200.0).floor() as i32;
         let within = r.rem_euclid(1200.0);
-        maqam
-            .ascending
+        scale
             .iter()
             .filter(|d| d.step < 7)
             .find(|d| circ(within, d.cents) <= config.tolerance_cents)
@@ -585,9 +646,9 @@ fn score(
                 Some(b) => b - pattern[0],
                 None => return false,
             };
-            win.iter()
-                .zip(&pattern)
-                .all(|(s, p)| *s == Some(p + base) && base % 7 == 0)
+            win.iter().zip(&pattern).all(|(s, p)| {
+                *s == Some(p + base) && (if repeating { base % 7 == 0 } else { base == 0 })
+            })
         });
         if found {
             phrases_found += 1;
@@ -615,6 +676,8 @@ fn score(
     MaqamCandidate {
         maqam: maqam.id.clone(),
         tonic,
+        variant: variant.map(str::to_owned),
+        tonic_octave,
         score,
         supporting,
         contradicting,

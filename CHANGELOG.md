@@ -5,6 +5,20 @@ All notable changes are documented here ([Keep a Changelog](https://keepachangel
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-22
+
+- Add a sourced, provisional dataset for the eight maqamat in صنع بسحرك,
+  with 24-EDO notation approximations and per-entry citations.
+- Schema 2: explicit alternative formulas, octave-periodicity and upper-jins
+  tonic placement. Legacy schema 1 remains readable.
+- Add variant realization and range-target APIs. Nonperiodic Saba illustrations
+  stay within their documented register.
+- Score alternatives independently and report the selected variant; use absolute
+  register-aware comparisons for nonperiodic candidates.
+- Public Maqam/Jins/Candidate structs gain fields: explicit 0.x API version bump.
+- Add reference-spelling, all-tonic, Bayati Re/Sol/La and recognition regressions.
+
+
 ## [0.3.1] - 2026-10-22
 
 - Reject corrected fingerboard positions behind the nut and non-finite positions.

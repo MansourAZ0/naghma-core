@@ -1,7 +1,7 @@
 //! Data structures for maqamat and ajnas.
 //!
-//! **This module contains no musical definitions.** Maqam and jins data is
-//! supplied by the user as JSON ([`MaqamDataset`]) and validated on load.
+//! Maqam and jins data is loaded as JSON ([`MaqamDataset`]) and validated.
+//! An optional sourced 24-EDO teaching dataset is explicitly provisional.
 //! Every dataset carries [`Provenance`]; applications must label anything
 //! that is not [`ProvenanceStatus::Validated`] accordingly and must not
 //! present synthetic test data as music theory.
@@ -29,7 +29,11 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 
 /// Current dataset schema version understood by this crate.
-pub const SCHEMA_VERSION: u32 = 1;
+pub const SCHEMA_VERSION: u32 = 2;
+
+fn yes() -> bool {
+    true
+}
 
 /// One note of a scale or jins, relative to its root/tonic.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -63,6 +67,12 @@ pub struct Jins {
     pub name: Name,
     /// Notes relative to the root, ascending, starting with `{step: 0, cents: 0}`.
     pub degrees: Vec<ScaleDegree>,
+    /// Letter step of the tonic above the lowest note (3 for Upper Rast).
+    #[serde(default)]
+    pub tonic_step: u8,
+    /// Bibliographic or teaching-source URLs.
+    #[serde(default)]
+    pub sources: Vec<String>,
     /// Optional educational text.
     #[serde(default)]
     pub description: Option<String>,
@@ -103,6 +113,27 @@ pub struct Phrase {
     pub description: Option<String>,
 }
 
+/// A documented alternative scale illustration, not an independent maqam.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScaleVariant {
+    /// Identifier unique within the maqam.
+    pub id: String,
+    /// Descriptive bilingual name of the alternative.
+    pub name: Name,
+    /// Complete ascending illustration relative to the same tonic.
+    pub ascending: Vec<ScaleDegree>,
+    /// Its own ajnas placements, not a union with other alternatives.
+    #[serde(default)]
+    pub ajnas: Vec<JinsPlacement>,
+    /// Optional explanation of the source's alternative.
+    #[serde(default)]
+    pub description: Option<String>,
+    /// Source URLs for this illustration.
+    #[serde(default)]
+    pub sources: Vec<String>,
+}
+
 /// A maqam definition.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -121,6 +152,15 @@ pub struct Maqam {
     pub tonic: NoteSpelling,
     /// Ascending scale, starting with `{step: 0, cents: 0}`.
     pub ascending: Vec<ScaleDegree>,
+    /// Whether the pattern may be repeated by octaves. False for register-specific illustrations such as Saba.
+    #[serde(default = "yes")]
+    pub octave_repeating: bool,
+    /// Documented alternatives, scored independently.
+    #[serde(default)]
+    pub variants: Vec<ScaleVariant>,
+    /// Source URLs for the primary illustration.
+    #[serde(default)]
+    pub sources: Vec<String>,
     /// Descending scale if it differs from the ascending one (listed
     /// descending, from the top).
     #[serde(default)]
@@ -187,6 +227,89 @@ impl Maqam {
         realize(tonic, &self.ascending)
     }
 
+    /// Select the primary illustration (`None`) or an explicit alternative.
+    pub fn scale(&self, variant: Option<&str>) -> Result<&[ScaleDegree], MaqamDataError> {
+        match variant {
+            None => Ok(&self.ascending),
+            Some(id) => self
+                .variants
+                .iter()
+                .find(|v| v.id == id)
+                .map(|v| v.ascending.as_slice())
+                .ok_or_else(|| {
+                    MaqamDataError::Invalid(vec![format!("unknown variant {id:?} for {}", self.id)])
+                }),
+        }
+    }
+
+    /// Ajnas belonging to the selected illustration.
+    pub fn placements(&self, variant: Option<&str>) -> Result<&[JinsPlacement], MaqamDataError> {
+        self.scale(variant)?;
+        Ok(match variant {
+            None => &self.ajnas,
+            Some(id) => {
+                &self
+                    .variants
+                    .iter()
+                    .find(|v| v.id == id)
+                    .expect("checked")
+                    .ajnas
+            }
+        })
+    }
+
+    /// Realize one illustration at an explicit tonic and register.
+    pub fn realize_variant(
+        &self,
+        tonic: SpelledNote,
+        variant: Option<&str>,
+    ) -> Result<Vec<RealizedNote>, MaqamDataError> {
+        Ok(realize(tonic, self.scale(variant)?))
+    }
+
+    /// Targets in a physical instrument range. Nonperiodic illustrations stay
+    /// in the tonic's specified register; no undocumented octaves are invented.
+    pub fn targets_between(
+        &self,
+        tonic: SpelledNote,
+        variant: Option<&str>,
+        low: Pitch,
+        high: Pitch,
+    ) -> Result<Vec<RealizedNote>, MaqamDataError> {
+        if !low.0.is_finite() || !high.0.is_finite() || low.0 > high.0 {
+            return Err(MaqamDataError::Invalid(vec!["invalid target range".into()]));
+        }
+        let degrees = self.scale(variant)?;
+        let mut notes = Vec::new();
+        if self.octave_repeating {
+            // SpelledNote has an i8 octave; derive bounds from the requested range.
+            let max_cents = degrees.last().map_or(0.0, |d| d.cents);
+            let first = ((low.0 - tonic.nominal_pitch().0 - max_cents / 100.0) / 12.0)
+                .floor()
+                .max(-256.0) as i32;
+            let last = ((high.0 - tonic.nominal_pitch().0) / 12.0)
+                .ceil()
+                .min(256.0) as i32;
+            for shift in first..=last {
+                let octave = i32::from(tonic.octave) + shift;
+                // Leave room for up to two octaves in the source illustration.
+                if !(-128..=125).contains(&octave) {
+                    continue;
+                }
+                notes.extend(realize(
+                    SpelledNote::new(tonic.degree, tonic.accidental, octave as i8),
+                    degrees,
+                ));
+            }
+        } else {
+            notes = realize(tonic, degrees);
+        }
+        notes.retain(|n| n.pitch.0 >= low.0 && n.pitch.0 <= high.0);
+        notes.sort_by(|a, b| a.pitch.0.total_cmp(&b.pitch.0));
+        notes.dedup_by(|a, b| (a.pitch.0 - b.pitch.0).abs() < 1e-8);
+        Ok(notes)
+    }
+
     /// Default tonic in the given octave.
     pub fn default_tonic(&self, octave: i8) -> SpelledNote {
         SpelledNote::new(self.tonic.degree, self.tonic.accidental, octave)
@@ -197,7 +320,7 @@ impl Maqam {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MaqamDataset {
-    /// Schema version; must equal [`SCHEMA_VERSION`].
+    /// Schema version: 1 (legacy) or [`SCHEMA_VERSION`].
     pub schema_version: u32,
     /// Where the data comes from and how much it can be trusted.
     pub provenance: Provenance,
@@ -210,6 +333,14 @@ pub struct MaqamDataset {
 }
 
 impl MaqamDataset {
+    /// Eight sourced Arabic maqam illustrations, with 24-EDO approximations.
+    /// This opt-in dataset is provisional, includes per-entry source URLs,
+    /// and does not claim measured intonation or real-performance validation.
+    pub fn teaching_eight_24edo() -> Self {
+        Self::from_json(include_str!("../../data/maqamat/eight-24edo.json"))
+            .expect("the bundled teaching dataset is validated by tests")
+    }
+
     /// Parse and validate JSON.
     pub fn from_json(json: &str) -> Result<Self, MaqamDataError> {
         let ds: Self =
@@ -232,7 +363,7 @@ impl MaqamDataset {
     /// Returns every problem found, not just the first.
     pub fn validate(&self) -> Result<(), MaqamDataError> {
         let mut problems = Vec::new();
-        if self.schema_version != SCHEMA_VERSION {
+        if ![1, SCHEMA_VERSION].contains(&self.schema_version) {
             problems.push(format!(
                 "schema version {} is not supported (expected {SCHEMA_VERSION})",
                 self.schema_version
@@ -244,6 +375,12 @@ impl MaqamDataset {
                 problems.push(format!("duplicate jins id {:?}", j.id));
             }
             check_degrees(&format!("jins {:?}", j.id), &j.degrees, true, &mut problems);
+            if !j.degrees.iter().any(|d| d.step == j.tonic_step) {
+                problems.push(format!("jins {:?}: tonic step does not exist", j.id));
+            }
+            if self.schema_version == 1 && j.tonic_step != 0 {
+                problems.push("upper-tonic jins require schema 2".into());
+            }
         }
         let jins_ids: HashMap<&str, &Jins> =
             self.ajnas.iter().map(|j| (j.id.as_str(), j)).collect();
@@ -259,14 +396,33 @@ impl MaqamDataset {
                 asc.reverse();
                 check_degrees(&format!("{ctx} descending"), &asc, false, &mut problems);
             }
-            let max_step = m.ascending.iter().map(|d| d.step).max().unwrap_or(0);
-            for p in &m.ajnas {
-                match jins_ids.get(p.jins.as_str()) {
-                    None => problems.push(format!("{ctx}: unknown jins {:?}", p.jins)),
-                    Some(_) if p.on_step > max_step => {
-                        problems.push(format!("{ctx}: jins {:?} placed above the scale", p.jins))
+            if self.schema_version == 1 && (!m.octave_repeating || !m.variants.is_empty()) {
+                problems.push(format!(
+                    "{ctx}: variants and nonperiodic patterns require schema 2"
+                ));
+            }
+            let mut variants_seen = HashSet::new();
+            for v in &m.variants {
+                if v.id.is_empty() || !variants_seen.insert(v.id.as_str()) {
+                    problems.push(format!("{ctx}: empty or duplicate variant id {:?}", v.id));
+                }
+                check_degrees(
+                    &format!("{ctx} variant {:?}", v.id),
+                    &v.ascending,
+                    true,
+                    &mut problems,
+                );
+            }
+            for (degrees, placements) in std::iter::once((&m.ascending, &m.ajnas))
+                .chain(m.variants.iter().map(|v| (&v.ascending, &v.ajnas)))
+            {
+                for p in placements {
+                    match jins_ids.get(p.jins.as_str()) {
+                        None => problems.push(format!("{ctx}: unknown jins {:?}", p.jins)),
+                        Some(_) if !degrees.iter().any(|d| d.step == p.on_step) => problems
+                            .push(format!("{ctx}: jins {:?} placed above the scale", p.jins)),
+                        Some(_) => {}
                     }
-                    Some(_) => {}
                 }
             }
             for r in &m.resting_steps {
