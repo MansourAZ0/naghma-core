@@ -234,8 +234,9 @@ fn evaluate(
                 })
                 .collect();
             println!(
-                "    t={t:6.1} {:<12} {}",
+                "    t={t:6.1} {:<12} off {:+5.1}  {}",
                 status_name(a.status),
+                a.tuning_offset_cents,
                 top.join("  ")
             );
             if evidence {

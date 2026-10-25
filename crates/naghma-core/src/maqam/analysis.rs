@@ -97,6 +97,13 @@ pub struct AnalyzerConfig {
     /// Real fingers and strings are never exact; the fade avoids an
     /// all-or-nothing cliff at the boundary.
     pub tolerance_cents: f64,
+    /// Global tuning offset of the instrument in cents, subtracted from
+    /// every note before scoring. `None` estimates it from the window
+    /// (see [`estimate_tuning_offset`]); `Some(0.0)` disables compensation.
+    pub tuning_offset_cents: Option<f64>,
+    /// Largest offset the estimator may return, cents. Keep below 25: a
+    /// larger shift could reinterpret naturals as quarter-tones.
+    pub max_tuning_offset_cents: f64,
     /// Candidates whose score is within this margin of the best make the
     /// result ambiguous.
     pub ambiguity_margin: f64,
@@ -117,6 +124,8 @@ impl Default for AnalyzerConfig {
             min_notes: 6,
             min_distinct: 4,
             tolerance_cents: 30.0,
+            tuning_offset_cents: None,
+            max_tuning_offset_cents: 20.0,
             ambiguity_margin: 0.08,
             min_score: 0.6,
             max_candidates: 5,
@@ -238,6 +247,10 @@ pub struct MaqamAnalysis {
     /// The best candidate of the earlier and later halves of the window
     /// differ while both fit well: a modulation may have occurred.
     pub possible_modulation: bool,
+    /// Tuning offset (cents) subtracted from the notes before scoring:
+    /// estimated, or the configured fixed value.
+    #[serde(default)]
+    pub tuning_offset_cents: f64,
 }
 
 /// Rolling note history plus scoring.
@@ -313,7 +326,10 @@ impl MaqamAnalyzer {
         let config = &self.config;
         let raw: Vec<HistoryNote> = self.history.iter().copied().collect();
         let window = (raw.first().map_or(now_s, |n| n.start_s), now_s);
-        let notes = prepare(&raw);
+        let offset = config.tuning_offset_cents.unwrap_or_else(|| {
+            estimate_tuning_offset(&raw, config.max_tuning_offset_cents).unwrap_or(0.0)
+        });
+        let notes = prepare(&raw, offset);
         let mut analysis = MaqamAnalysis {
             window,
             notes: notes.len(),
@@ -321,6 +337,7 @@ impl MaqamAnalyzer {
             status: AnalysisStatus::InsufficientData,
             candidates: Vec::new(),
             possible_modulation: false,
+            tuning_offset_cents: offset,
         };
         let distinct = distinct_classes(&notes);
         if notes.len() < config.min_notes || distinct < config.min_distinct {
@@ -362,10 +379,68 @@ impl MaqamAnalyzer {
     }
 }
 
+/// Estimate an instrument's global tuning offset, in cents, from played
+/// notes.
+///
+/// Arabic music uses quarter-tones, but most played time is on
+/// 12-EDO-natural degrees, so the offset is the shift of the semitone grid
+/// that best fits the notes: the maximum of a duration-weighted kernel
+/// density (σ = 10 cents) of note positions relative to the nearest
+/// semitone, searched within `±max_cents` and refined by a local weighted
+/// mean. Notes far from any semitone (such as half-flats) barely contribute.
+///
+/// Returns `None` with less than one second of material. `max_cents` should
+/// stay below 25: a 50-cent shift would turn every natural into a
+/// quarter-tone.
+pub fn estimate_tuning_offset(notes: &[HistoryNote], max_cents: f64) -> Option<f64> {
+    const SIGMA: f64 = 10.0;
+    let max_cents = max_cents.clamp(0.0, 49.0);
+    let points: Vec<(f64, f64)> = notes
+        .iter()
+        .filter(|n| n.duration_s > 0.0 && n.pitch.is_finite())
+        .map(|n| (n.pitch * 100.0, n.duration_s.min(2.0)))
+        .collect();
+    let total: f64 = points.iter().map(|p| p.1).sum();
+    if total < 1.0 {
+        return None;
+    }
+    let wrap = |x: f64| (x + 50.0).rem_euclid(100.0) - 50.0;
+    let density = |d: f64| -> f64 {
+        points
+            .iter()
+            .map(|&(c, w)| w * (-0.5 * (wrap(c - d) / SIGMA).powi(2)).exp())
+            .sum()
+    };
+    let steps = (max_cents * 2.0).round() as i64;
+    let mut best: (f64, f64) = (0.0, f64::NEG_INFINITY);
+    for k in -steps..=steps {
+        let d = k as f64 * 0.5;
+        let s = density(d);
+        // Prefer the smaller offset on (near-)ties.
+        if s > best.1 + 1e-9 || ((s - best.1).abs() <= 1e-9 && d.abs() < best.0.abs()) {
+            best = (d, s);
+        }
+    }
+    let (mut num, mut den) = (0.0, 0.0);
+    for &(c, w) in &points {
+        let r = wrap(c - best.0);
+        if r.abs() < 2.0 * SIGMA {
+            num += w * r;
+            den += w;
+        }
+    }
+    let refined = if den > 0.0 {
+        best.0 + num / den
+    } else {
+        best.0
+    };
+    Some(refined.clamp(-max_cents, max_cents))
+}
+
 /// A note prepared for scoring.
 #[derive(Debug, Clone, Copy)]
 struct Prepared {
-    /// Absolute pitch in cents.
+    /// Absolute pitch in cents after tuning compensation.
     cents: f64,
     /// Evidence weight (duration, at least 50 ms).
     weight: f64,
@@ -373,14 +448,14 @@ struct Prepared {
     duration: f64,
 }
 
-fn prepare(notes: &[HistoryNote]) -> Vec<Prepared> {
+fn prepare(notes: &[HistoryNote], offset: f64) -> Vec<Prepared> {
     let mut prepared: Vec<(f64, Prepared)> = notes
         .iter()
         .map(|n| {
             (
                 n.start_s,
                 Prepared {
-                    cents: n.pitch * 100.0,
+                    cents: n.pitch * 100.0 - offset,
                     weight: n.duration_s.max(0.05),
                     duration: n.duration_s,
                 },
@@ -1034,7 +1109,10 @@ mod tests {
         // One note 29 vs 31 cents off: the hard 30-cent cutoff used to flip
         // it from "in scale" to "foreign"; now the fit barely changes.
         let fit = |off: f64| {
-            let mut a = analyzer();
+            let mut a = MaqamAnalyzer::new(AnalyzerConfig {
+                tuning_offset_cents: Some(0.0),
+                ..AnalyzerConfig::default()
+            });
             let mut melody = detuned_melody(0.0);
             melody[2].0 += off / 100.0;
             let end = play(&mut a, 0.0, &melody);
@@ -1054,5 +1132,69 @@ mod tests {
                 .unwrap()
         };
         assert!((fit(29.0) - fit(31.0)).abs() < 0.01);
+    }
+
+    #[test]
+    fn tuning_offset_is_found_and_quarter_tones_do_not_pull_it() {
+        // Maqam A contains two half-flats; the instrument is 12 cents sharp.
+        let notes: Vec<HistoryNote> = detuned_melody(12.0)
+            .into_iter()
+            .enumerate()
+            .map(|(i, (pitch, d))| HistoryNote {
+                start_s: i as f64,
+                duration_s: d,
+                pitch,
+            })
+            .collect();
+        let est = estimate_tuning_offset(&notes, 20.0).unwrap();
+        assert!((est - 12.0).abs() < 1.0, "{est}");
+        let flat: Vec<HistoryNote> = notes
+            .iter()
+            .map(|n| HistoryNote {
+                pitch: n.pitch - 0.2,
+                ..*n
+            })
+            .collect();
+        let est = estimate_tuning_offset(&flat, 20.0).unwrap();
+        assert!((est + 8.0).abs() < 1.0, "{est}");
+    }
+
+    #[test]
+    fn tuning_offset_is_bounded_and_needs_material() {
+        let notes: Vec<HistoryNote> = (0..8)
+            .map(|i| HistoryNote {
+                start_s: i as f64,
+                duration_s: 0.5,
+                pitch: 60.0 + i as f64 + 0.4,
+            })
+            .collect();
+        let est = estimate_tuning_offset(&notes, 20.0).unwrap();
+        assert!(
+            est.abs() <= 20.0,
+            "a 40-cent shift must not be followed: {est}"
+        );
+        assert_eq!(estimate_tuning_offset(&notes[..1], 20.0), None);
+    }
+
+    #[test]
+    fn a_detuned_instrument_still_names_the_right_tonic() {
+        // 27 cents sharp: without compensation every note rounds up to the
+        // next quarter-tone and the tonic is misnamed as Do half-sharp.
+        let run = |offset: Option<f64>| {
+            let mut a = MaqamAnalyzer::new(AnalyzerConfig {
+                tuning_offset_cents: offset,
+                ..AnalyzerConfig::default()
+            });
+            let end = play(&mut a, 0.0, &detuned_melody(27.0));
+            a.analyze(Some(&dataset()), None, end)
+        };
+        let fixed = run(Some(0.0));
+        assert_eq!(fixed.candidates[0].maqam, "test-maqam-a");
+        assert_ne!(fixed.candidates[0].tonic, sp(Degree::Do, 0));
+        let auto = run(None);
+        assert_eq!(auto.candidates[0].maqam, "test-maqam-a", "{auto:#?}");
+        assert_eq!(auto.candidates[0].tonic, sp(Degree::Do, 0));
+        assert!((auto.tuning_offset_cents - 20.0).abs() < 1e-9);
+        assert!(auto.candidates[0].contradicting.is_empty());
     }
 }
