@@ -5,6 +5,38 @@ All notable changes are documented here ([Keep a Changelog](https://keepachangel
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-25
+
+Measured against 85 labelled public oud recordings (docs/EVALUATION.md):
+share of live analyses naming the stated maqam 49% -> 71% (development set)
+and 44% -> 63% (held-out set); top-3 82% -> 90% / 77% -> 88%.
+
+### naghma-core
+- Soft scale-degree membership: `tolerance_cents` is now an accepted
+  intonation error (full credit within half of it, half at it, none at 1.5x)
+  instead of a hard cutoff. A degree or jins note counts as heard only after
+  0.12 s of matching time.
+- Global tuning-offset compensation: `estimate_tuning_offset()` (bounded to
+  +/-20 c, ignores quarter-tones); `AnalyzerConfig::tuning_offset_cents`
+  (`None` = estimate, `Some(x)` = fixed) and `max_tuning_offset_cents`;
+  `MaqamAnalysis::tuning_offset_cents` reports the applied offset.
+- Nonperiodic maqamat (Saba): notes outside the documented register are
+  compared an octave at a time with the nearest documented register; anchors
+  need at least half the played time inside their register.
+- `AnalyzerConfig::min_note_s` (0.15 s) ignores pluck transients.
+- `ScoreWeights::final_rest` separates the "latest long note on the tonic"
+  term (default 0; it flipped results phrase by phrase); tonic-time weight 0.4.
+- Default window 30 s (was 25 s).
+- `membership()` is public.
+- `NoteTracker`: a note never starts before the previous one ended
+  (attack-started notes could overlap).
+- Serialized output changes are additive (`tuningOffsetCents`); `ScoreWeights`
+  and `AnalyzerConfig` gain fields (0.x minor version bump).
+
+### naghma-audio
+- `eval_maqam` example: per-clip and aggregate maqam/tonic accuracy over a
+  manifest of labelled recordings, with JSON config overrides for A/B tests.
+
 ## [0.4.0] - 2026-10-22
 
 - Add a sourced, provisional dataset for the eight maqamat in صنع بسحرك,
