@@ -54,8 +54,10 @@ pub struct ScoreWeights {
     pub foreign: f64,
     /// Weight of scale-degree coverage.
     pub coverage: f64,
-    /// Weight of tonic emphasis.
+    /// Weight of time spent on the tonic (saturating at a 50 % share).
     pub tonic: f64,
+    /// Weight of the latest long note resting on the tonic.
+    pub final_rest: f64,
     /// Weight of resting-tone emphasis.
     pub resting: f64,
     /// Weight of jins completeness.
@@ -71,6 +73,7 @@ impl Default for ScoreWeights {
             foreign: 1.5,
             coverage: 0.5,
             tonic: 0.4,
+            final_rest: 0.0,
             resting: 0.2,
             ajnas: 0.3,
             phrase: 0.15,
@@ -97,6 +100,8 @@ pub struct AnalyzerConfig {
     /// Real fingers and strings are never exact; the fade avoids an
     /// all-or-nothing cliff at the boundary.
     pub tolerance_cents: f64,
+    /// Notes shorter than this (seconds) are ignored as transients.
+    pub min_note_s: f64,
     /// Global tuning offset of the instrument in cents, subtracted from
     /// every note before scoring. `None` estimates it from the window
     /// (see [`estimate_tuning_offset`]); `Some(0.0)` disables compensation.
@@ -120,10 +125,11 @@ pub struct AnalyzerConfig {
 impl Default for AnalyzerConfig {
     fn default() -> Self {
         Self {
-            window_s: 25.0,
+            window_s: 30.0,
             min_notes: 6,
             min_distinct: 4,
             tolerance_cents: 30.0,
+            min_note_s: 0.15,
             tuning_offset_cents: None,
             max_tuning_offset_cents: 20.0,
             ambiguity_margin: 0.08,
@@ -236,7 +242,7 @@ pub struct MaqamCandidate {
 pub struct MaqamAnalysis {
     /// Analysed window `[start, end]` in stream seconds.
     pub window: (f64, f64),
-    /// Notes in the window.
+    /// Notes in the window (after ignoring transients).
     pub notes: usize,
     /// Tonic fixed by the user, if any.
     pub tonic_selection: Option<NoteSpelling>,
@@ -324,7 +330,12 @@ impl MaqamAnalyzer {
     ) -> MaqamAnalysis {
         self.prune(now_s);
         let config = &self.config;
-        let raw: Vec<HistoryNote> = self.history.iter().copied().collect();
+        let raw: Vec<HistoryNote> = self
+            .history
+            .iter()
+            .filter(|n| n.duration_s >= config.min_note_s)
+            .copied()
+            .collect();
         let window = (raw.first().map_or(now_s, |n| n.start_s), now_s);
         let offset = config.tuning_offset_cents.unwrap_or_else(|| {
             estimate_tuning_offset(&raw, config.max_tuning_offset_cents).unwrap_or(0.0)
@@ -843,9 +854,8 @@ fn score(
 
     let score = w.fit * fit - w.foreign * foreign_share
         + w.coverage * coverage
-        // Tonic term in [0, 1]: half from time on the tonic (saturating at a
-        // 50 % share), half from ending on it.
-        + w.tonic * (0.5 * (tonic_share * 2.0).min(1.0) + if final_rest { 0.5 } else { 0.0 })
+        + w.tonic * (tonic_share * 2.0).min(1.0)
+        + if final_rest { w.final_rest } else { 0.0 }
         + w.resting * resting_share
         + w.ajnas * ajnas_avg
         + w.phrase * phrases_found.min(3) as f64;
@@ -1196,5 +1206,34 @@ mod tests {
         assert_eq!(auto.candidates[0].tonic, sp(Degree::Do, 0));
         assert!((auto.tuning_offset_cents - 20.0).abs() < 1e-9);
         assert!(auto.candidates[0].contradicting.is_empty());
+    }
+
+    #[test]
+    fn short_transients_are_ignored() {
+        let mut melody = detuned_melody(0.0);
+        // Pluck transients a quarter-tone off, 50 ms each.
+        for k in [3, 6, 9] {
+            melody.insert(k, (64.5, 0.05));
+        }
+        let run = |min_note_s: f64| {
+            let mut a = MaqamAnalyzer::new(AnalyzerConfig {
+                min_note_s,
+                ..AnalyzerConfig::default()
+            });
+            let end = play(&mut a, 0.0, &melody);
+            a.analyze(Some(&dataset()), Some(sp(Degree::Do, 0)), end)
+        };
+        let kept = run(0.0);
+        let filtered = run(AnalyzerConfig::default().min_note_s);
+        let a_of = |r: &MaqamAnalysis| {
+            r.candidates
+                .iter()
+                .find(|c| c.maqam == "test-maqam-a")
+                .unwrap()
+                .clone()
+        };
+        assert!(!a_of(&kept).contradicting.is_empty());
+        assert!(a_of(&filtered).contradicting.is_empty());
+        assert_eq!(filtered.notes, kept.notes - 3);
     }
 }
