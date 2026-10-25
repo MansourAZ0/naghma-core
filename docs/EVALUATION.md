@@ -48,3 +48,222 @@ fields record provenance.
 **Labels must come from the source** (title, description, on-screen text),
 never from this analyser's output. Recordings are not distributed with the
 repository.
+
+## Corpus (October 2026)
+
+Public YouTube recordings of solo oud whose **title or description names the
+maqam**; tonics are recorded only where the source states one (6 clips). Audio
+only, converted to mono 48 kHz; one segment per recording (the first ~60 s
+after the first sound; full length for short scale demos and doulabs). The
+audio is **not** in this repository; the source list below allows the corpus
+to be rebuilt.
+
+* **Development set** — 54 labelled clips: 8 single-line scale demonstrations
+  (one per maqam, Taqasim School), 6 short doulabs, 40 taqasim; 6–8 per
+  maqam. Used for every measurement and parameter choice below. Two
+  open-string tuning references were used only to check frequencies.
+* **Held-out set** — 31 further clips (4 per maqam, 3 for Hijaz), mostly
+  different players, downloaded **before** any tuning and evaluated only once
+  the parameters were fixed. One keyboard (not oud) Ajam clip is included.
+* Excluded from aggregates (`include: false`): a Sikah video whose description
+  lists several sikah-family maqamat, and a Hijaz video whose description says
+  it mixes Hijaz with Rast, Saba and Bayati.
+
+### Frequency checks on the easy material
+
+* Scale demos read as stated: e.g. the Rast demo gives Do3 Re3 Mi half-flat Fa
+  Sol La Si half-flat Do4 (Si flat descending), every note within ±15 cents of
+  24-EDO; the Bayati demo's oud is +8 c in the low register and up to +23 c
+  higher up. Open-string references match their stated strings.
+* Instruments are rarely at La4 = 440 Hz: grid offsets span −22…+23 c.
+* Performed intonation differs from the 24-EDO conversion: half-flats measured
+  from −60 c (Rast demo, Mi half-flat) to about −14 c (the Sikah demo's tonic)
+  below the natural; Saba's second degree is often played close to the flat.
+* Pluck transients: the first ~85 ms of a note can read up to ~35 c flat and
+  form a separate short note; open low courses ring and octave-flip (Re2/Re3),
+  which is harmless for pitch-class analysis.
+* Tracker bug found and fixed: an attack could be used as the start of two
+  notes, producing overlapping events (9 per minute in one taqsim).
+
+## Results: v0.4.0 → v0.5.0
+
+`step1` = share of analyses (every 2 s, rolling window) whose best candidate is
+the stated maqam; `top1` = best candidate at the end of the clip; `step3` /
+`top3` = among the best three.
+
+| Set | Version | step1 | step3 | top1 | top3 | stated tonic |
+| --- | --- | --- | --- | --- | --- | --- |
+| Development (54) | 0.4.0 | 49% | 82% | 57% | 81% | 2/5 |
+| Development (54) | 0.5.0 | **71%** | **90%** | **72%** | **93%** | 3/5 |
+| Held-out (31) | 0.4.0 | 44% | 77% | 45% | 68% | 2/3 |
+| Held-out (31) | 0.5.0 | **63%** | **88%** | **55%** | **87%** | 3/3 |
+
+Per maqam, `step1` (development / held-out):
+
+| Maqam | 0.4.0 dev | 0.5.0 dev | 0.4.0 held-out | 0.5.0 held-out |
+| --- | --- | --- | --- | --- |
+| Ajam | 75% | 93% | 72% | 77% |
+| Bayati | 55% | 61% | 46% | 58% |
+| Hijaz | 46% | 79% | 64% | 85% |
+| Kurd | 49% | 70% | 46% | 73% |
+| Nahawand | 52% | 70% | 61% | 82% |
+| Rast | 50% | 78% | 48% | 72% |
+| Saba | 26% | 66% | 11% | 52% |
+| Sikah | 41% | 44% | 7% | 15% |
+
+The single-line scale demos went from 56–88% to 94–100% of analyses correct
+for seven maqamat; the Sikah demo stays wrong (see limits). The "stated tonic"
+misses are consistent with transposed instruments (an "Ajam on Fa / Jiharkah"
+recording sounds a semitone lower, a common oud tuning); applications should
+use the player's transposition setting.
+
+### Hypotheses measured on the development set
+
+Each row changes one thing relative to the final configuration (`step1` /
+`top1`). The baseline for this table was the configuration at the time of the
+ablation, with a 0.08 s minimum note: 70% / 72%.
+
+| Change | step1 | top1 | Kept? |
+| --- | --- | --- | --- |
+| Hard 30-cent cutoff instead of soft membership | 63% | 63% | soft kept |
+| No octave comparison outside Saba's documented register | 69% (Saba 75% → 24%) | 70% | folding kept |
+| No tuning-offset compensation | 71% | 69% | kept (see note) |
+| Offset search bound ±10 c / ±25 c instead of ±20 c | 69% / 69% | 70% / 70% | ±20 c |
+| Ignore offsets below 8 c | 70% | 72% | no |
+| Extra +10 c / +20 c tolerance on quarter-tone degrees | 71% / 67% | 72% / 72% | no |
+| Minimum note 0 s / 0.15 s (vs 0.08 s) | 70% / 71% | 69% / 74% | 0.15 s |
+| Tolerance 20 / 25 / 35 c (vs 30 c) | 66% / 68% / 69% | 70% / 70% / 70% | 30 c |
+| Window 20 / 25 / 40 s (vs 30 s) | 64% / 68% / 72% | 65% / 63% / 70% | 30 s (app requirement) |
+| Cadence term (notes followed by ≥ 0.25 s pause, weight 0.2 / 0.4) | −3…−6 pts | −2…−7 pts | no |
+| "Latest long note on tonic" weight 0.1 / 0.2 (vs 0) | 67% / 63% | 81% / 78% | 0 (noisy) |
+
+Tuning-offset compensation is roughly neutral on aggregate because most
+instruments here are within ±10 c, but it decides the clearly detuned ones
+(Hijaz at +18 c: 3% → 41% of analyses; Rast at +14 c: 81% → 96%) and is the
+reason a detuned instrument keeps the correct tonic name. It hurt one old
+commercial Sikah recording (+15 c) where the performed intonation itself is
+far from the 24-EDO grid. The cumulative effect of the changes is far larger
+than any single row because they interact (soft membership alone was neutral
+before the tonic weighting changed).
+
+## Limits
+
+* Labels are whatever the uploader wrote. Taqasim modulate; a 60-second
+  segment of a "Rast" taqsim can legitimately sit in another maqam for a while,
+  so 100% is not the ceiling for `step1`.
+* **Sikah remains poor (15–44%).** Two measured causes, both about data rather
+  than scoring: performers place the sikah tonic much higher than the 24-EDO
+  half-flat (≈ −14 c from Mi in the Sikah demo), and several held-out Sikah
+  performances use Hijaz on the 3rd degree, which the dataset's single Sikah
+  illustration (Upper Rast on the 3rd) does not include. Neither was changed:
+  intonation values and maqam variants need the musician's review.
+* Most remaining errors are tonic choices between maqamat that share a pitch
+  set (Rast/Bayati/Sikah, Kurd/Nahawand/Hijaz on related tonics); these are
+  often reported as `ambiguous` (35% of analyses).
+* Small corpus (85 clips, 6 with stated tonics), one segment per recording, and
+  the development set was used for parameter choices; the held-out numbers are
+  the fairer estimate.
+
+## Reproducing
+
+1. Download each listed source's audio, convert to mono 48 kHz WAV
+   (`ffmpeg -i src -ac 1 -ar 48000 full.wav`) and cut the listed segment.
+2. Write a manifest (format above) pointing at the segments.
+3. `cargo run --release -p naghma-audio --example eval_maqam -- manifest.json`.
+
+### Development set (used for tuning)
+
+| id | stated maqam | stated tonic | kind | used | source |
+| --- | --- | --- | --- | --- | --- |
+| scale-rast-ts | rast |  | scale | yes | [Oud Beginners - Maqam Rast Scale](https://www.youtube.com/watch?v=zKQz8E8aB4M) (from 2.2 s, 23 s) |
+| scale-bayati-ts | bayati |  | scale | yes | [Oud Beginners - Maqam Bayat Scale](https://www.youtube.com/watch?v=roJmZv032mI) (from 1.9 s, 17 s) |
+| scale-ajam-ts | ajam |  | scale | yes | [Oud Beginner - Maqam Ajam Scale](https://www.youtube.com/watch?v=Mp260ZaAn8k) (from 1.6 s, 20 s) |
+| scale-saba-ts | saba |  | scale | yes | [Oud Beginners - Maqam Saba Scale](https://www.youtube.com/watch?v=b-KWqLDXRuU) (from 2.3 s, 56 s) |
+| scale-kurd-ts | kurd |  | scale | yes | [Oud Beginners - Maqam Kurd Scale](https://www.youtube.com/watch?v=2OWD8kuacxA) (from 2.9 s, 42 s) |
+| scale-sikah-ts | sikah |  | scale | yes | [Oud Beginners - Maqam Segah Scale](https://www.youtube.com/watch?v=IP8cWM5iTgQ) (from 2.1 s, 22 s) |
+| scale-nahawand-ts | nahawand |  | scale | yes | [Oud Beginners - Maqam Nahawand](https://www.youtube.com/watch?v=2IllTHbv3LI) (from 2.8 s, 40 s) |
+| scale-hijaz-ts | hijaz |  | scale | yes | [Oud Beginners - Maqam Hijaz Scale](https://www.youtube.com/watch?v=k74TTCa-RT8) (from 2.1 s, 37 s) |
+| rast-ibrahim | rast |  | taqsim | yes | [Taqasim Oud Maqam Rast / تقاسيم عود على مقام راست](https://www.youtube.com/watch?v=m4cLPohrUVY) (from 0.8 s, 60 s) |
+| rast-khatib | rast |  | taqsim | yes | [Ahmad Al Khatib, Taqsim Rast. Arabic style, تقسيم راست , احمد الخطيب](https://www.youtube.com/watch?v=M1bCW_7YT9U) (from 0.0 s, 60 s) |
+| rast-balays | rast |  | taqsim | yes | [Taqsim oud maqam Rast -  تقسيم قصير على العود : مقام راست](https://www.youtube.com/watch?v=QIBFl2xStOY) (from 0.2 s, 58 s) |
+| rast-oved | rast |  | taqsim | yes | [Taqsim In Maqam Rast On Egyptain Oud  תקסים במקאם ראשט עוד מצרי](https://www.youtube.com/watch?v=sniSMPCmTJc) (from 0.0 s, 60 s) |
+| rast-bashir | rast |  | taqsim | yes | [Taqsîm En Maqâm Râst](https://www.youtube.com/watch?v=SzzVmVagf4g) (from 0.1 s, 60 s) |
+| rast-doulab-ts | rast |  | doulab | yes | [Oud Beginners - Doulab Rast](https://www.youtube.com/watch?v=9vPlIgLgnrU) (from 2.9 s, 63 s) |
+| bayati-hamra | bayati |  | taqsim | yes | [Oud Taksim Bayātī (بياتي, Uşşâk, Bayat) by Hesham Hamra (4k Video) 2020](https://www.youtube.com/watch?v=1DrzYlc8DAM) (from 3.7 s, 60 s) |
+| bayati-alsalem | bayati |  | taqsim | yes | [تقاسيم عود مقام بياتي Taqasim maqam Bayati](https://www.youtube.com/watch?v=Bg_U8nntsbM) (from 0.9 s, 60 s) |
+| bayati-bitar | bayati |  | taqsim | yes | [Taqasim Bayati](https://www.youtube.com/watch?v=-Y9Xl8w9UuM) (from 0.0 s, 60 s) |
+| bayati-qasabji | bayati |  | taqsim | yes | [Taqsim Oud Maqam Bayati - Muhamed al-Qasabji  - 1955   القصبجي](https://www.youtube.com/watch?v=OQSmPsX3SIA) (from 0.0 s, 60 s) |
+| bayati-jadue | bayati |  | taqsim | yes | [yuseff jadue - taksim oud maqam bayati-](https://www.youtube.com/watch?v=_Tv-WEY61_I) (from 0.3 s, 47 s) |
+| hijaz-ibrahim | hijaz |  | taqsim | yes | [Taqasim Oud - Maqam Hijaz](https://www.youtube.com/watch?v=DZ9lwxl37-I) (from 1.2 s, 60 s) |
+| hijaz-oved | hijaz |  | taqsim | yes | [תקסים במקאם חיג'אז על עוד Taqsim In Maqam Hijaz On Oud](https://www.youtube.com/watch?v=GvnBrl5FSVs) (from 0.0 s, 60 s) |
+| hijaz-holm | hijaz |  | taqsim | yes | [Oud Taqsim (March 14, 2017) - Maqam Hijaz](https://www.youtube.com/watch?v=9Ok-jc3uHl8) (from 10.7 s, 60 s) |
+| hijaz-abdullah | hijaz |  | taqsim | yes | [Oud Taqsim Maqam Hijaz](https://www.youtube.com/watch?v=IBdUJcNNzJ4) (from 0.0 s, 60 s) |
+| hijaz-abbad | hijaz |  | taqsim | yes | [Omar Abbad - Oud Taqsim, Maqam Hijaz](https://www.youtube.com/watch?v=gnTmBmUhpho) (from 0.0 s, 60 s) |
+| nahawand-arkach | nahawand | Do | taqsim | yes | [Takassim Nahawand Do](https://www.youtube.com/watch?v=QpeXnaR7hFg) (from 0.4 s, 60 s) |
+| nahawand-khayyat | nahawand |  | taqsim | yes | [Taqasim Oud _ Nahawand  /تقاسيم عود نهاوند  /سيف الخياط](https://www.youtube.com/watch?v=FsEDiZN9GgI) (from 0.0 s, 60 s) |
+| nahawand-ashkar | nahawand |  | taqsim | yes | [Yuval Ashkar Nahawand Taqasim](https://www.youtube.com/watch?v=CXA4izJVqIg) (from 0.1 s, 60 s) |
+| nahawand-dampwater | nahawand |  | taqsim | yes | [Taqseem Nahawand on Oud](https://www.youtube.com/watch?v=nF2Fi3YdMGA) (from 9.1 s, 60 s) |
+| nahawand-khatib | nahawand |  | taqsim | yes | [Taqsim Nahawand](https://www.youtube.com/watch?v=LAsb0u9kg4I) (from 0.0 s, 60 s) |
+| nahawand-doulab-ts | nahawand |  | doulab | yes | [Oud Beginners - Doulab Nahawand Qadim](https://www.youtube.com/watch?v=eE1KmhzydGQ) (from 1.6 s, 50 s) |
+| kurd-ibrahim | kurd |  | taqsim | yes | [Taqasim Kurd](https://www.youtube.com/watch?v=TdhPGqKH-lk) (from 0.0 s, 60 s) |
+| kurd-oved | kurd |  | taqsim | yes | [תקסים במקאם כורד על עוד Taqsim In Maqam Kurd On Oud](https://www.youtube.com/watch?v=S64oRQlis_Y) (from 0.0 s, 60 s) |
+| kurd-benyoucef | kurd |  | taqsim | yes | [taqsim oud maqam kurd, Raphaël Benyoucef](https://www.youtube.com/watch?v=i7HsqK1HXWc) (from 0.9 s, 60 s) |
+| kurd-taboud | kurd | La | taqsim | yes | [تقاسيم عود على مقام كرد لا](https://www.youtube.com/watch?v=YDWLczLgyes) (from 0.0 s, 60 s) |
+| kurd-alsalem | kurd |  | taqsim | yes | [تقاسيم مقام كرد عود .. احساس هادئ Taqasim oud Kord](https://www.youtube.com/watch?v=E90ahRYScWg) (from 0.8 s, 60 s) |
+| kurd-esses | kurd |  | taqsim | yes | [Taqsim Oud Maqam kurd ~ Victor Esses ~ New York 2014](https://www.youtube.com/watch?v=p1_SXNl_Nn0) (from 1.0 s, 60 s) |
+| kurd-doulab-ts | kurd |  | doulab | yes | [Oud Beginners - Doulab Kurd](https://www.youtube.com/watch?v=ptL5qCG_G6E) (from 2.6 s, 41 s) |
+| saba-hamra | saba | Re | taqsim | yes | [Arabic Oud Solo Taksim Re Saba Maqam Hesham Hamra 4k 2020](https://www.youtube.com/watch?v=ERtSDNI4fe4) (from 5.3 s, 60 s) |
+| saba-oved | saba |  | taqsim | yes | [תקסים במקאם צבא על עוד Taqsim In Maqam Saba On Oud](https://www.youtube.com/watch?v=Oj94_bv8GQc) (from 0.0 s, 60 s) |
+| saba-wach | saba |  | taqsim | yes | [Oud taqsim in maqam "Saba" / تقسيم عود](https://www.youtube.com/watch?v=k5YUJ_i3R30) (from 0.0 s, 60 s) |
+| saba-ayash | saba |  | taqsim | yes | [تقاسيم صبا - عود](https://www.youtube.com/watch?v=ngUrXktaTX4) (from 0.0 s, 60 s) |
+| saba-oudprof | saba |  | taqsim | yes | [تقاسيم عود مقام الصّبا Saba Oud Taqasim](https://www.youtube.com/watch?v=ze4iflAnFDE) (from 0.0 s, 60 s) |
+| saba-doulab-ts | saba |  | doulab | yes | [Oud Beginners - Doulab Saba 1](https://www.youtube.com/watch?v=2UsdWlPYpbI) (from 1.6 s, 46 s) |
+| sikah-oved | sikah |  | taqsim | yes | [תקסים במקאם שיגא על עוד Taqsim In Maqam Sikah On Oud](https://www.youtube.com/watch?v=bIrt6MySd8o) (from 0.0 s, 60 s) |
+| sikah-arkach | sikah |  | taqsim | yes | [Takassim SIKA](https://www.youtube.com/watch?v=SX9TQTf2WFM) (from 0.0 s, 60 s) |
+| sikah-oudprof | sikah |  | taqsim | no | [OUD: SIKAH تقاسيم عود سيكاه](https://www.youtube.com/watch?v=5npzscLqyfk) (from 0.1 s, 60 s) |
+| sikah-esses | sikah |  | taqsim | yes | [Taqsim Oud Maqam Sikah ~ Victor Esses ~ New York 2015](https://www.youtube.com/watch?v=4PrHmpNC3Qo) (from 0.1 s, 60 s) |
+| sikah-sunbati | sikah |  | taqsim | yes | [Taqaseem sikah](https://www.youtube.com/watch?v=DkMnJlIBa7A) (from 0.1 s, 60 s) |
+| sikah-doulab-ts | sikah |  | doulab | yes | [Oud Beginners - Doulab Segah 1](https://www.youtube.com/watch?v=K60JPekkAZ0) (from 2.4 s, 56 s) |
+| ajam-oved | ajam |  | taqsim | yes | [תקסים במקאם עג'ם על עוד Taqsim In Maqam Ajam On Oud](https://www.youtube.com/watch?v=a1IMbm_X8A0) (from 0.0 s, 60 s) |
+| ajam-arkach | ajam | Do | taqsim | yes | [Takassim AJAM](https://www.youtube.com/watch?v=L7jffYzcL2A) (from 0.7 s, 60 s) |
+| ajam-shama | ajam |  | taqsim | yes | [Oud Solo “Ajam” - عود مقام العجم](https://www.youtube.com/watch?v=JUokcjK9LOw) (from 3.0 s, 60 s) |
+| ajam-alsalem | ajam | Fa | taqsim | yes | [تقاسيم عود مقام عجم .. مساحة فرح  Taqasim oud Ajam](https://www.youtube.com/watch?v=uwyAgyUOUjQ) (from 0.7 s, 60 s) |
+| ajam-oudprof | ajam |  | taqsim | yes | [عود - تقاسيم عجم Oud - Ajam (Major) Imrpov.](https://www.youtube.com/watch?v=imHlXv8S9ag) (from 0.1 s, 60 s) |
+| ajam-doulab-ts | ajam |  | doulab | yes | [Oud Beginners - Doulab Ajam](https://www.youtube.com/watch?v=BSceU-WtzMk) (from 1.6 s, 35 s) |
+
+### Held-out set (evaluated only after tuning)
+
+| id | stated maqam | stated tonic | kind | used | source |
+| --- | --- | --- | --- | --- | --- |
+| ho-rast-qallaf | rast |  | taqsim | yes | [هاشم القلاف - تقاسيم راست](https://www.youtube.com/watch?v=gMjIOYDQiIE) (from 0.0 s, 59 s) |
+| ho-rast-hatem | rast |  | taqsim | yes | [عماد حاتم موسيقيون في الظل تقاسيم عود مقام الراست](https://www.youtube.com/watch?v=XISz3i6KKmM) (from 0.0 s, 60 s) |
+| ho-rast-sunbati | rast |  | taqsim | yes | [رياض السنباطي - تقاسيم راست](https://www.youtube.com/watch?v=k3CCz6LWzNc) (from 0.5 s, 60 s) |
+| ho-rast-shamma | rast |  | taqsim | yes | [naseer shamma --- rast taqsim](https://www.youtube.com/watch?v=5Thvk4h_25g) (from 1.5 s, 60 s) |
+| ho-bayati-nasreddine | bayati |  | taqsim | yes | [تقاسيم على مقام البيات](https://www.youtube.com/watch?v=8QJO2Nd-24c) (from 0.5 s, 60 s) |
+| ho-bayati-sunbati | bayati |  | taqsim | yes | [Taqaseem bayati](https://www.youtube.com/watch?v=V0uiNETqN3A) (from 0.1 s, 60 s) |
+| ho-bayati-bernaoui | bayati |  | taqsim | yes | [تقاسيم بياتي](https://www.youtube.com/watch?v=eW3WqB-i8Vs) (from 0.0 s, 60 s) |
+| ho-bayati-muttalib | bayati |  | taqsim | yes | [تقاسيم بياتى من القلب ( سمير عبد المطلب )](https://www.youtube.com/watch?v=pcCgsF3ZO8o) (from 0.1 s, 60 s) |
+| ho-hijaz-shama | hijaz |  | taqsim | yes | [Oud solo “Hijaz” - عود مقام حجاز](https://www.youtube.com/watch?v=GigDh-d7wS0) (from 0.0 s, 60 s) |
+| ho-hijaz-hamra | hijaz |  | taqsim | yes | [عزف عود ـ هشام حمرا تقاسيم على مقام الحجاز](https://www.youtube.com/watch?v=kfFPdpaPC9Q) (from 0.0 s, 60 s) |
+| ho-hijaz-alsalem | hijaz |  | taqsim | no | [حجازيات تقاسيم عود مقام حجاز](https://www.youtube.com/watch?v=DoEEFZaCewU) (from 0.1 s, 60 s) |
+| ho-hijaz-sunbati | hijaz |  | taqsim | yes | [رياض السنباطي - تقاسيم حجاز](https://www.youtube.com/watch?v=3nmnOXrTJDY) (from 0.5 s, 60 s) |
+| ho-nahawand-sunbati | nahawand |  | taqsim | yes | [Taqaseem nihawand](https://www.youtube.com/watch?v=RzldNCWPkEw) (from 2.7 s, 60 s) |
+| ho-nahawand-hamra | nahawand |  | taqsim | yes | [رحلة على العود - عزف عود - تقاسيم على مقام النهاوند هشام حمرا](https://www.youtube.com/watch?v=yTr1UkJoLQY) (from 2.5 s, 60 s) |
+| ho-nahawand-nabeel | nahawand |  | taqsim | yes | [تقاسيم نهاوند على عود فاروق تورنز](https://www.youtube.com/watch?v=qHwMe5zsbkA) (from 0.1 s, 60 s) |
+| ho-nahawand-bouresli | nahawand | Do | taqsim | yes | [Taqasim Oud C minor تقاسيم مقام النهاوند](https://www.youtube.com/watch?v=wug7KsLgkrM) (from 0.0 s, 60 s) |
+| ho-kurd-shoublak | kurd |  | taqsim | yes | [Oud improvisation..Maqam Kurd](https://www.youtube.com/watch?v=9H1CXHDPjkY) (from 1.4 s, 60 s) |
+| ho-kurd-badrieh | kurd |  | taqsim | yes | [Oud improvisation Maqam Kurd تقاسيم عود على مقام كرد](https://www.youtube.com/watch?v=HF6kH9csiWo) (from 2.5 s, 60 s) |
+| ho-kurd-tidhar | kurd | La | taqsim | yes | [Makam kurd la Takasim](https://www.youtube.com/watch?v=uZKM1Gl8JcY) (from 2.9 s, 60 s) |
+| ho-kurd-ararah | kurd |  | taqsim | yes | [تقاسيم مقام كرد](https://www.youtube.com/watch?v=-0vb0QQMbeY) (from 0.1 s, 60 s) |
+| ho-saba-khayyat | saba |  | taqsim | yes | [Taqasim Oud Maqam Alsaba / تقاسيم عود  مقام الصبا](https://www.youtube.com/watch?v=KTj87sjQIAc) (from 3.5 s, 60 s) |
+| ho-saba-baramawy | saba |  | taqsim | yes | [Yasmine El Baramawy - Oud Improvisation on Saba Maqam - ياسمين البرماوي - ارتجال عود على مقام الصبا](https://www.youtube.com/watch?v=F_i628CM3NQ) (from 0.4 s, 60 s) |
+| ho-saba-shehadeh | saba |  | taqsim | yes | [Taqasim  Oud  From  Maqam  Saba  By  NS](https://www.youtube.com/watch?v=AvZ0KVnCdhQ) (from 3.6 s, 60 s) |
+| ho-saba-kaabour | saba |  | taqsim | yes | [Taqseem 3 Maqam Saba](https://www.youtube.com/watch?v=gTe7WgayjNk) (from 0.0 s, 60 s) |
+| ho-sikah-arkach2 | sikah | Mi half-flat | taqsim | yes | [Takassim SIKA](https://www.youtube.com/watch?v=Gfd2qWN1z1w) (from 0.8 s, 60 s) |
+| ho-sikah-oudprof5 | sikah |  | taqsim | yes | [تقاسيم سيكاه على العود Sikah Oud Taqasim/Improvisation 5](https://www.youtube.com/watch?v=euCLrtTM-lA) (from 0.0 s, 60 s) |
+| ho-sikah-ouekdi | sikah |  | taqsim | yes | [Taqsim Oud sikah Si Moez EL OUEKDI](https://www.youtube.com/watch?v=346fB5J35NM) (from 0.2 s, 60 s) |
+| ho-sikah-chehab | sikah |  | taqsim | yes | [Adel Abed Chehab Doulab and Taksim Maqam Sikah "Talmaciu's Garden" تقاسيم عود](https://www.youtube.com/watch?v=rKlgjs0UkC4) (from 3.8 s, 60 s) |
+| ho-ajam-thamer | ajam |  | taqsim | yes | [تقاسيم على مقام العجم بالعود ( عود ثامر)](https://www.youtube.com/watch?v=HSXBqDJyNDg) (from 0.0 s, 60 s) |
+| ho-ajam-jneid | ajam |  | keyboard | yes | [تقاسيم مقام عجم](https://www.youtube.com/watch?v=HfWFSr07bW4) (from 0.0 s, 60 s) |
+| ho-ajam-bashir | ajam |  | taqsim | yes | [Taqsim in Maqam 'Ajam](https://www.youtube.com/watch?v=Srb91cENvZ4) (from 1.9 s, 60 s) |
+| ho-ajam-shaheen | ajam |  | taqsim | yes | [Oud Taqasim Ajam تقاسيم عود عجم](https://www.youtube.com/watch?v=9ISXMG8ZxUA) (from 1.6 s, 60 s) |

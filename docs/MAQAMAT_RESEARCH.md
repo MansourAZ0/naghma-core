@@ -85,8 +85,15 @@ Other illustrated formulas use pitch classes for the existing heuristic scorer.
 Regression tests check the source reference spellings, Bayati on Re/Sol/La,
 all 24 tonic transpositions, separate upper-jins routes, Upper Rast/Ajam tonic
 placement and Saba's nonperiodic behavior. These are structural and synthetic
-recognition tests, **not evaluation against real performances**. Labelled real
-oud recordings and musician review remain necessary for that evaluation.
+recognition tests. Recognition has since been measured against 85 labelled
+public oud recordings ([EVALUATION.md](EVALUATION.md)); musician review of the
+data remains necessary.
+
+Measured intonation in those recordings departs from these conversions (for
+example a Sikah tonic about 14 cents below Mi natural rather than 50). The
+analyser absorbs this algorithmically — soft membership with an adjustable
+tolerance and global tuning-offset compensation — without changing the
+dataset's values.
 
 ## Schema compatibility
 

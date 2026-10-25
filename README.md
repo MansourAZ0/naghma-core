@@ -90,12 +90,26 @@ values can be regenerated with:
 cargo run -p naghma-core --release --example export_maqam_reference
 ```
 
+### Recognition accuracy
+
+`MaqamAnalyzer` is a heuristic ranking, measured against labelled public oud
+recordings in [docs/EVALUATION.md](docs/EVALUATION.md): on a held-out set the
+stated maqam is the best candidate in 63% of live analyses and among the best
+three in 88% (Sikah remains weak). It tolerates imperfect intonation:
+`tolerance_cents` (default 30 cents = 30% of a semitone) is a soft accepted
+error, and the instrument's overall tuning offset is estimated and removed.
+Re-run the measurement with:
+
+```sh
+cargo run --release -p naghma-audio --example eval_maqam -- manifest.json
+```
+
 ## Using from another repository
 
 ```toml
 [dependencies]
-naghma-core  = { git = "https://github.com/MansourAZ0/naghma-core", tag = "v0.4.0" }
-naghma-audio = { git = "https://github.com/MansourAZ0/naghma-core", tag = "v0.4.0" }
+naghma-core  = { git = "https://github.com/MansourAZ0/naghma-core", tag = "v0.5.0" }
+naghma-audio = { git = "https://github.com/MansourAZ0/naghma-core", tag = "v0.5.0" }
 ```
 
 For local development against sibling checkouts, create a gitignored
