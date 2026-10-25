@@ -171,6 +171,8 @@ pub struct NoteTracker {
     active: Option<Active>,
     pending: Option<Pending>,
     last_onset_s: Option<f64>,
+    /// End of the most recent note; a new note never starts before it.
+    last_end_s: Option<f64>,
     next_id: u64,
 }
 
@@ -184,6 +186,7 @@ impl NoteTracker {
             active: None,
             pending: None,
             last_onset_s: None,
+            last_end_s: None,
             next_id: 1,
         }
     }
@@ -358,7 +361,10 @@ impl NoteTracker {
             let start = match pending.start_kind {
                 NoteStart::Attack => self.last_onset_s.unwrap_or(pending.first_time_s),
                 NoteStart::PitchChange => pending.first_time_s,
-            };
+            }
+            // An attack already claimed by the previous note (which then
+            // changed pitch) must not make the two events overlap.
+            .max(self.last_end_s.unwrap_or(f64::NEG_INFINITY));
             out.started = Some(self.start_note(
                 pending.note,
                 filtered,
@@ -436,6 +442,7 @@ impl NoteTracker {
         let reading = self.reading_for(median);
         let mut event = a.event;
         event.end_s = Some(end_s.max(event.start_s));
+        self.last_end_s = event.end_s;
         event.frequency_hz = reading.frequency_hz;
         event.sounding_pitch = reading.sounding_pitch;
         event.player_pitch = reading.player_pitch;
@@ -660,6 +667,43 @@ mod tests {
         assert_eq!(s.player.note, note("Sol4"));
         assert_eq!(s.start_kind, NoteStart::Attack);
         assert!((s.start_s - onset_t).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_note_never_starts_before_the_previous_one_ended() {
+        // Measured on real oud recordings: a note started by an attack ends
+        // after a short dropout, and the next pitch (still within 0.5 s of
+        // the same attack) was given the attack time as its start, so the
+        // two events overlapped.
+        let mut t = tracker();
+        let onset_t = 10.0 * HOP;
+        let mut events = Vec::new();
+        for i in 10..20 {
+            let onset = (i == 10).then_some(onset_t);
+            let u = t.update(&voiced(i, 62.0), onset);
+            events.extend(u.started);
+        }
+        for i in 20..27 {
+            let u = t.update(&silent(i), None);
+            events.extend(u.ended);
+        }
+        for i in 27..32 {
+            let u = t.update(&voiced(i, 50.0), None);
+            events.extend(u.started);
+        }
+        let first_end = events
+            .iter()
+            .find_map(|e| e.end_s)
+            .expect("first note ended");
+        let second = events
+            .iter()
+            .rfind(|e| e.end_s.is_none() && e.player.note == note("Re3"))
+            .expect("second note");
+        assert_eq!(second.start_kind, NoteStart::Attack);
+        assert!(
+            second.start_s >= first_end,
+            "{second:?} overlaps {first_end}"
+        );
     }
 
     #[test]
