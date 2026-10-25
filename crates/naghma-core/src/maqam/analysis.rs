@@ -435,7 +435,7 @@ fn rank(
                 std::iter::once(None).chain(maqam.variants.iter().map(|v| Some(v.id.as_str())))
             {
                 if maqam.octave_repeating {
-                    out.push(score(notes, dataset, maqam, t, variant, None, config));
+                    out.extend(score(notes, dataset, maqam, t, variant, None, config));
                 } else {
                     let low = notes.iter().map(|n| n.cents).fold(f64::INFINITY, f64::min);
                     let high = notes
@@ -445,7 +445,7 @@ fn rank(
                     let first = ((low / 1200.0).floor() as i32 - 3).max(-128);
                     let last = ((high / 1200.0).floor() as i32).min(125);
                     for octave in first..=last {
-                        out.push(score(
+                        out.extend(score(
                             notes,
                             dataset,
                             maqam,
@@ -530,7 +530,7 @@ fn score(
     variant: Option<&str>,
     tonic_octave: Option<i8>,
     config: &AnalyzerConfig,
-) -> MaqamCandidate {
+) -> Option<MaqamCandidate> {
     let w = config.weights;
     let repeating = maqam.octave_repeating;
     let tonic_cents = tonic_octave.map_or_else(
@@ -554,9 +554,43 @@ fn score(
     }
     let tol = config.tolerance_cents;
     let classes = targets(&degrees, repeating, tol);
+    // Nonperiodic illustrations document a register. Notes inside it are
+    // compared exactly, so register-specific degrees stay distinct. Notes
+    // outside it (for example below the tonic) are compared, an octave at a
+    // time, with the nearest documented register: the data says nothing
+    // more specific about them. An anchor is only considered when most of
+    // the played time lies inside its documented register, so folding can
+    // never move a whole melody into a different register.
+    let span = (
+        classes.first().map_or(0.0, |c| c.cents),
+        classes.last().map_or(0.0, |c| c.cents),
+    );
+    let margin = 1.5 * config.tolerance_cents;
+    if !repeating {
+        let total: f64 = notes.iter().map(|n| n.weight).sum();
+        let inside: f64 = notes
+            .iter()
+            .filter(|n| {
+                let r = n.cents - tonic_cents;
+                r >= span.0 - margin && r <= span.1 + margin
+            })
+            .map(|n| n.weight)
+            .sum();
+        if inside < 0.5 * total {
+            return None;
+        }
+    }
     let rel = |n: &Prepared| -> f64 {
         let r = n.cents - tonic_cents;
-        if repeating { r.rem_euclid(1200.0) } else { r }
+        if repeating {
+            r.rem_euclid(1200.0)
+        } else if r < span.0 - margin {
+            r + 1200.0 * ((span.0 - margin - r) / 1200.0).ceil()
+        } else if r > span.1 + margin {
+            r - 1200.0 * ((r - span.1 - margin) / 1200.0).ceil()
+        } else {
+            r
+        }
     };
     let distance = |a: f64, b: f64| if repeating { circ(a, b) } else { (a - b).abs() };
     // Best matching target and its membership.
@@ -741,7 +775,7 @@ fn score(
         + w.ajnas * ajnas_avg
         + w.phrase * phrases_found.min(3) as f64;
 
-    MaqamCandidate {
+    Some(MaqamCandidate {
         maqam: maqam.id.clone(),
         tonic,
         variant: variant.map(str::to_owned),
@@ -749,7 +783,7 @@ fn score(
         score,
         supporting,
         contradicting,
-    }
+    })
 }
 
 #[cfg(test)]

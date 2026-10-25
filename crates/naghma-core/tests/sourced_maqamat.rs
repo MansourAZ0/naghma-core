@@ -299,3 +299,19 @@ fn nonperiodic_recognition_reports_an_anchor_and_rejects_octave_folding() {
             .any(|e| matches!(e, Evidence::ForeignNotes { share, .. } if *share > 0.0))
     );
 }
+
+#[test]
+fn notes_below_a_nonperiodic_register_compare_with_the_documented_octave() {
+    // Saba on Re3 with excursions to Do3 and La2 below the tonic (common on
+    // the oud): they are compared an octave up (Do4, La3 are Saba degrees),
+    // not reported as foreign. Notes inside the register stay exact.
+    let candidate = analyze(
+        "saba",
+        &[
+            0.0, 150.0, 300.0, 400.0, 300.0, 150.0, 0.0, -200.0, -500.0, -200.0, 0.0,
+        ],
+        note("Re3"),
+    );
+    assert_eq!(candidate.tonic_octave, Some(3));
+    assert!(candidate.contradicting.is_empty(), "{candidate:#?}");
+}
