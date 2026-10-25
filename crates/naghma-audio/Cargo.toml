@@ -25,3 +25,4 @@ cpal = ["dep:cpal"]
 
 [dev-dependencies]
 hound = "3.5"
+serde_json.workspace = true

@@ -1,0 +1,35 @@
+{
+  "formatVersion": 1,
+  "description": "Example eval_maqam manifest. Paths are relative to this file. Labels must come from what the source states (title, description, on-screen text), never from the analyser.",
+  "clips": [
+    {
+      "id": "rast-example",
+      "path": "audio/rast-example/seg.wav",
+      "maqam": "rast",
+      "tonic": null,
+      "kind": "taqsim",
+      "include": true,
+      "url": "https://www.youtube.com/watch?v=EXAMPLE",
+      "title": "Taqsim maqam Rast (example)",
+      "channel": "Example channel",
+      "segment": { "startS": 0.5, "durationS": 60.0 },
+      "statedEvidence": "Title: 'Taqsim maqam Rast'"
+    },
+    {
+      "id": "kurd-on-la-example",
+      "path": "audio/kurd-on-la-example/seg.wav",
+      "maqam": "kurd",
+      "tonic": { "degree": "la", "accidental": 0 },
+      "kind": "taqsim",
+      "include": true,
+      "statedEvidence": "Title states 'Kurd on La'"
+    },
+    {
+      "id": "tuning-reference",
+      "path": "audio/tuning-reference/seg.wav",
+      "maqam": null,
+      "kind": "tuning",
+      "statedEvidence": "Open-string reference; skipped by the maqam evaluation"
+    }
+  ]
+}

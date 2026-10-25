@@ -294,6 +294,7 @@ dependencies = [
  "pitchforge",
  "rtrb",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
