@@ -88,8 +88,14 @@ pub struct AnalyzerConfig {
     pub min_notes: usize,
     /// Minimum distinct pitch classes before any ranking is reported.
     pub min_distinct: usize,
-    /// How far (cents) a played pitch may be from a scale degree and still
-    /// count as that degree.
+    /// Accepted intonation error, in cents (1 cent = 1 % of a semitone, so
+    /// 30 cents = 30 % of a semitone).
+    ///
+    /// Membership is soft: a played pitch within half of this of a scale
+    /// degree counts fully as that degree, one exactly this far counts
+    /// half, and credit fades smoothly to nothing at 1.5 × this distance.
+    /// Real fingers and strings are never exact; the fade avoids an
+    /// all-or-nothing cliff at the boundary.
     pub tolerance_cents: f64,
     /// Candidates whose score is within this margin of the best make the
     /// result ambiguous.
@@ -304,8 +310,10 @@ impl MaqamAnalyzer {
         now_s: f64,
     ) -> MaqamAnalysis {
         self.prune(now_s);
-        let notes: Vec<HistoryNote> = self.history.iter().copied().collect();
-        let window = (notes.first().map_or(now_s, |n| n.start_s), now_s);
+        let config = &self.config;
+        let raw: Vec<HistoryNote> = self.history.iter().copied().collect();
+        let window = (raw.first().map_or(now_s, |n| n.start_s), now_s);
+        let notes = prepare(&raw);
         let mut analysis = MaqamAnalysis {
             window,
             notes: notes.len(),
@@ -315,7 +323,7 @@ impl MaqamAnalyzer {
             possible_modulation: false,
         };
         let distinct = distinct_classes(&notes);
-        if notes.len() < self.config.min_notes || distinct < self.config.min_distinct {
+        if notes.len() < config.min_notes || distinct < config.min_distinct {
             return analysis;
         }
         let Some(dataset) = dataset.filter(|d| !d.maqamat.is_empty()) else {
@@ -323,13 +331,13 @@ impl MaqamAnalyzer {
             return analysis;
         };
 
-        let mut candidates = rank(&notes, dataset, tonic, &self.config);
+        let mut candidates = rank(&notes, dataset, tonic, config);
         let best = candidates.first().map_or(0.0, |c| c.score);
-        analysis.status = if best < self.config.min_score {
+        analysis.status = if best < config.min_score {
             AnalysisStatus::Unknown
         } else if candidates
             .get(1)
-            .is_some_and(|c| best - c.score <= self.config.ambiguity_margin)
+            .is_some_and(|c| best - c.score <= config.ambiguity_margin)
         {
             AnalysisStatus::Ambiguous
         } else {
@@ -337,43 +345,69 @@ impl MaqamAnalyzer {
         };
 
         // Modulation check: compare the halves of the window.
-        if notes.len() >= 2 * self.config.min_notes {
+        if notes.len() >= 2 * config.min_notes {
             let mid = notes.len() / 2;
-            let first = rank(&notes[..mid], dataset, tonic, &self.config);
-            let second = rank(&notes[mid..], dataset, tonic, &self.config);
+            let first = rank(&notes[..mid], dataset, tonic, config);
+            let second = rank(&notes[mid..], dataset, tonic, config);
             if let (Some(a), Some(b)) = (first.first(), second.first()) {
                 analysis.possible_modulation = (a.maqam != b.maqam || a.tonic != b.tonic)
-                    && a.score >= self.config.min_score
-                    && b.score >= self.config.min_score;
+                    && a.score >= config.min_score
+                    && b.score >= config.min_score;
             }
         }
 
-        candidates.truncate(self.config.max_candidates);
+        candidates.truncate(config.max_candidates);
         analysis.candidates = candidates;
         analysis
     }
 }
 
+/// A note prepared for scoring.
+#[derive(Debug, Clone, Copy)]
+struct Prepared {
+    /// Absolute pitch in cents.
+    cents: f64,
+    /// Evidence weight (duration, at least 50 ms).
+    weight: f64,
+    /// Duration, seconds.
+    duration: f64,
+}
+
+fn prepare(notes: &[HistoryNote]) -> Vec<Prepared> {
+    let mut prepared: Vec<(f64, Prepared)> = notes
+        .iter()
+        .map(|n| {
+            (
+                n.start_s,
+                Prepared {
+                    cents: n.pitch * 100.0,
+                    weight: n.duration_s.max(0.05),
+                    duration: n.duration_s,
+                },
+            )
+        })
+        .collect();
+    prepared.sort_by(|a, b| a.0.total_cmp(&b.0));
+    prepared.into_iter().map(|(_, p)| p).collect()
+}
+
 /// Number of distinct quarter-tone pitch classes.
-fn distinct_classes(notes: &[HistoryNote]) -> usize {
+fn distinct_classes(notes: &[Prepared]) -> usize {
     let mut classes: Vec<i64> = notes
         .iter()
-        .map(|n| ((n.pitch * 2.0).round() as i64).rem_euclid(24))
+        .map(|n| ((n.cents / 50.0).round() as i64).rem_euclid(24))
         .collect();
     classes.sort_unstable();
     classes.dedup();
     classes.len()
 }
 
-/// Candidate tonic pitch classes (in semitones, quarter-tone resolution):
-/// the user's choice, or the most-played pitch classes.
-fn candidate_tonics(notes: &[HistoryNote], tonic: Option<NoteSpelling>) -> Vec<NoteSpelling> {
-    if let Some(t) = tonic {
-        return vec![t];
-    }
+/// Candidate tonic pitch classes (quarter-tone resolution): the
+/// most-played classes.
+fn candidate_tonics(notes: &[Prepared]) -> Vec<NoteSpelling> {
     let mut weight = [0.0f64; 24];
     for n in notes {
-        weight[((n.pitch * 2.0).round() as i64).rem_euclid(24) as usize] += n.duration_s.max(0.05);
+        weight[((n.cents / 50.0).round() as i64).rem_euclid(24) as usize] += n.weight;
     }
     let mut classes: Vec<usize> = (0..24).filter(|&k| weight[k] > 0.0).collect();
     classes.sort_by(|&a, &b| weight[b].total_cmp(&weight[a]));
@@ -385,31 +419,31 @@ fn candidate_tonics(notes: &[HistoryNote], tonic: Option<NoteSpelling>) -> Vec<N
 }
 
 fn rank(
-    notes: &[HistoryNote],
+    notes: &[Prepared],
     dataset: &MaqamDataset,
     tonic: Option<NoteSpelling>,
     config: &AnalyzerConfig,
 ) -> Vec<MaqamCandidate> {
+    let tonics = match tonic {
+        Some(t) => vec![t],
+        None => candidate_tonics(notes),
+    };
     let mut out = Vec::new();
     for maqam in &dataset.maqamat {
-        let tonics = match tonic {
-            Some(t) => vec![t],
-            None => candidate_tonics(notes, None),
-        };
-        for t in tonics {
+        for &t in &tonics {
             for variant in
                 std::iter::once(None).chain(maqam.variants.iter().map(|v| Some(v.id.as_str())))
             {
                 if maqam.octave_repeating {
                     out.push(score(notes, dataset, maqam, t, variant, None, config));
                 } else {
-                    let low = notes.iter().map(|n| n.pitch).fold(f64::INFINITY, f64::min);
+                    let low = notes.iter().map(|n| n.cents).fold(f64::INFINITY, f64::min);
                     let high = notes
                         .iter()
-                        .map(|n| n.pitch)
+                        .map(|n| n.cents)
                         .fold(f64::NEG_INFINITY, f64::max);
-                    let first = ((low / 12.0).floor() as i32 - 3).max(-128);
-                    let last = ((high / 12.0).floor() as i32).min(125);
+                    let first = ((low / 1200.0).floor() as i32 - 3).max(-128);
+                    let last = ((high / 1200.0).floor() as i32).min(125);
                     for octave in first..=last {
                         out.push(score(
                             notes,
@@ -445,7 +479,32 @@ fn circ(a: f64, b: f64) -> f64 {
     d.min(1200.0 - d)
 }
 
-fn scale_classes(degrees: &[ScaleDegree], repeating: bool) -> Vec<f64> {
+/// Soft membership of a pitch `distance` cents from a target accepted with
+/// `tolerance`: 1 up to half the tolerance, ½ at the tolerance, raised-cosine
+/// fade to 0 at 1.5 × the tolerance.
+pub fn membership(distance: f64, tolerance: f64) -> f64 {
+    let d = distance.abs();
+    let lo = 0.5 * tolerance;
+    let hi = 1.5 * tolerance;
+    if d <= lo {
+        1.0
+    } else if d >= hi {
+        0.0
+    } else {
+        0.5 * (1.0 + (std::f64::consts::PI * (d - lo) / (hi - lo)).cos())
+    }
+}
+
+/// A scale degree as a scoring target.
+#[derive(Debug, Clone, Copy)]
+struct Target {
+    /// Cents above the tonic (pitch class for periodic maqamat).
+    cents: f64,
+    /// Accepted error for this degree.
+    tolerance: f64,
+}
+
+fn targets(degrees: &[ScaleDegree], repeating: bool, tolerance: f64) -> Vec<Target> {
     let mut v: Vec<f64> = degrees
         .iter()
         .map(|d| {
@@ -458,11 +517,13 @@ fn scale_classes(degrees: &[ScaleDegree], repeating: bool) -> Vec<f64> {
         .collect();
     v.sort_by(f64::total_cmp);
     v.dedup_by(|a, b| (*a - *b).abs() < 1.0);
-    v
+    v.into_iter()
+        .map(|cents| Target { cents, tolerance })
+        .collect()
 }
 
 fn score(
-    notes: &[HistoryNote],
+    notes: &[Prepared],
     dataset: &MaqamDataset,
     maqam: &Maqam,
     tonic: NoteSpelling,
@@ -481,9 +542,6 @@ fn score(
                 * 100.0
         },
     );
-    let normalize = |c: f64| if repeating { c.rem_euclid(1200.0) } else { c };
-    let distance = |a: f64, b: f64| if repeating { circ(a, b) } else { (a - b).abs() };
-    let rel = |n: &HistoryNote| normalize(n.pitch * 100.0 - tonic_cents);
     let scale = maqam.scale(variant).expect("variant comes from this maqam");
     let placements = maqam
         .placements(variant)
@@ -494,68 +552,82 @@ fn score(
             degrees.extend(desc.iter().copied());
         }
     }
-    let classes = scale_classes(&degrees, repeating);
-    let total_time: f64 = notes.iter().map(|n| n.duration_s.max(0.05)).sum();
+    let tol = config.tolerance_cents;
+    let classes = targets(&degrees, repeating, tol);
+    let rel = |n: &Prepared| -> f64 {
+        let r = n.cents - tonic_cents;
+        if repeating { r.rem_euclid(1200.0) } else { r }
+    };
+    let distance = |a: f64, b: f64| if repeating { circ(a, b) } else { (a - b).abs() };
+    // Best matching target and its membership.
+    let best_match = |r: f64, targets: &[Target]| -> Option<(usize, f64)> {
+        targets
+            .iter()
+            .enumerate()
+            .map(|(i, t)| (i, membership(distance(r, t.cents), t.tolerance)))
+            .max_by(|a, b| a.1.total_cmp(&b.1))
+    };
+    let on = |r: f64, c: f64| membership(distance(r, c), tol);
+    let total_time: f64 = notes.iter().map(|n| n.weight).sum();
+    // A degree counts as heard after this much (membership-weighted) time,
+    // so a single transient does not complete a jins.
+    let heard_s = 0.12;
 
     let mut in_time = 0.0;
     let mut foreign_time = 0.0;
     let mut foreign = Vec::new();
-    let mut heard = vec![false; classes.len()];
+    let mut degree_time = vec![0.0; classes.len()];
     let mut tonic_time = 0.0;
     for n in notes {
         let r = rel(n);
-        let t = n.duration_s.max(0.05);
-        let nearest = classes
-            .iter()
-            .enumerate()
-            .map(|(i, &c)| (i, distance(r, c)))
-            .min_by(|a, b| a.1.total_cmp(&b.1));
-        match nearest {
-            Some((i, d)) if d <= config.tolerance_cents => {
-                in_time += t;
-                heard[i] = true;
-                if distance(r, 0.0) <= config.tolerance_cents {
-                    tonic_time += t;
-                }
-            }
-            _ => {
-                foreign_time += t;
-                let q = (n.pitch * 2.0).round() / 2.0;
-                if !foreign.contains(&q) {
-                    foreign.push(q);
-                }
+        let m = best_match(r, &classes).map_or(0.0, |(i, m)| {
+            degree_time[i] += n.weight * m;
+            m
+        });
+        in_time += n.weight * m;
+        foreign_time += n.weight * (1.0 - m);
+        if m < 0.5 {
+            let q = (n.cents / 50.0).round() / 2.0;
+            if !foreign.contains(&q) {
+                foreign.push(q);
             }
         }
+        tonic_time += n.weight * on(r, 0.0);
     }
+    let heard = degree_time.iter().filter(|&&t| t >= heard_s).count();
     let fit = in_time / total_time;
     let foreign_share = foreign_time / total_time;
-    let coverage = heard.iter().filter(|&&h| h).count() as f64 / classes.len().max(1) as f64;
+    let coverage = heard as f64 / classes.len().max(1) as f64;
     let tonic_share = tonic_time / total_time;
 
     // The latest note that lasted at least as long as the median duration.
-    let mut durations: Vec<f64> = notes.iter().map(|n| n.duration_s).collect();
+    let mut durations: Vec<f64> = notes.iter().map(|n| n.duration).collect();
     durations.sort_by(f64::total_cmp);
     let median = durations[durations.len() / 2];
     let final_rest = notes
         .iter()
         .rev()
-        .find(|n| n.duration_s >= median)
-        .is_some_and(|n| distance(rel(n), 0.0) <= config.tolerance_cents);
+        .find(|n| n.duration >= median)
+        .is_some_and(|n| on(rel(n), 0.0) >= 0.5);
 
     let resting: Vec<f64> = maqam
         .resting_steps
         .iter()
         .filter_map(|s| scale.iter().find(|d| d.step == *s))
-        .map(|d| normalize(d.cents))
+        .map(|d| {
+            if repeating {
+                d.cents.rem_euclid(1200.0)
+            } else {
+                d.cents
+            }
+        })
         .collect();
     let resting_time: f64 = notes
         .iter()
-        .filter(|n| {
-            resting
-                .iter()
-                .any(|&c| distance(rel(n), c) <= config.tolerance_cents)
+        .map(|n| {
+            let r = rel(n);
+            n.weight * resting.iter().map(|&c| on(r, c)).fold(0.0, f64::max)
         })
-        .map(|n| n.duration_s.max(0.05))
         .sum();
     let resting_share = if resting.is_empty() {
         0.0
@@ -566,7 +638,7 @@ fn score(
     let mut supporting = vec![
         Evidence::ScaleFit { share: fit },
         Evidence::Coverage {
-            heard: heard.iter().filter(|&&h| h).count(),
+            heard,
             total: classes.len(),
         },
         Evidence::Tonic {
@@ -590,20 +662,16 @@ fn score(
         let Some(base) = scale.iter().find(|d| d.step == p.on_step) else {
             continue;
         };
-        let jins_classes: Vec<f64> = jins
+        let got = jins
             .degrees
             .iter()
-            .map(|d| normalize(base.cents + d.cents))
-            .collect();
-        let got = jins_classes
-            .iter()
-            .filter(|&&c| {
-                notes
-                    .iter()
-                    .any(|n| distance(rel(n), c) <= config.tolerance_cents)
+            .map(|d| {
+                let c = base.cents + d.cents;
+                if repeating { c.rem_euclid(1200.0) } else { c }
             })
+            .filter(|&c| notes.iter().map(|n| n.weight * on(rel(n), c)).sum::<f64>() >= heard_s)
             .count();
-        let completeness = got as f64 / jins_classes.len().max(1) as f64;
+        let completeness = got as f64 / jins.degrees.len().max(1) as f64;
         ajnas_score += completeness;
         ajnas_count += 1;
         supporting.push(Evidence::Jins {
@@ -618,12 +686,12 @@ fn score(
     };
 
     // Phrases: subsequence of scale steps (tonic-relative) in the melody.
-    let step_of = |n: &HistoryNote| -> Option<i32> {
-        let r = n.pitch * 100.0 - tonic_cents;
+    let step_of = |n: &Prepared| -> Option<i32> {
+        let r = n.cents - tonic_cents;
         if !repeating {
             return scale
                 .iter()
-                .find(|d| (r - d.cents).abs() <= config.tolerance_cents)
+                .find(|d| on(r, d.cents) >= 0.5)
                 .map(|d| i32::from(d.step));
         }
         let octave = (r / 1200.0).floor() as i32;
@@ -631,7 +699,7 @@ fn score(
         scale
             .iter()
             .filter(|d| d.step < 7)
-            .find(|d| circ(within, d.cents) <= config.tolerance_cents)
+            .find(|d| on(within, d.cents) >= 0.5)
             .map(|d| d.step as i32 + 7 * octave)
     };
     let steps: Vec<Option<i32>> = notes.iter().map(step_of).collect();
@@ -657,7 +725,7 @@ fn score(
     }
 
     let mut contradicting = Vec::new();
-    if foreign_share > 0.0 {
+    if foreign_share > 1e-9 {
         contradicting.push(Evidence::ForeignNotes {
             share: foreign_share,
             pitches: foreign,
@@ -899,5 +967,58 @@ mod tests {
         let end = play(&mut a, 0.0, &melody);
         let r = a.analyze(Some(&dataset()), None, end);
         assert!(r.possible_modulation, "{r:#?}");
+    }
+
+    /// Maqam A on Do, ending on the tonic, every pitch shifted by `cents`.
+    fn detuned_melody(cents: f64) -> Vec<(f64, f64)> {
+        let mut melody: Vec<(f64, f64)> = A_ON_DO.iter().map(|&p| (p, 0.4)).collect();
+        melody.extend([
+            (67.0, 0.6),
+            (65.0, 0.4),
+            (63.5, 0.4),
+            (62.0, 0.4),
+            (60.0, 1.2),
+        ]);
+        melody
+            .into_iter()
+            .map(|(p, d)| (p + cents / 100.0, d))
+            .collect()
+    }
+
+    #[test]
+    fn membership_is_soft_with_half_credit_at_the_tolerance() {
+        assert_eq!(membership(0.0, 30.0), 1.0);
+        assert_eq!(membership(15.0, 30.0), 1.0);
+        assert!((membership(30.0, 30.0) - 0.5).abs() < 1e-12);
+        assert!((membership(-30.0, 30.0) - 0.5).abs() < 1e-12);
+        assert_eq!(membership(45.0, 30.0), 0.0);
+        assert!(membership(25.0, 30.0) > membership(35.0, 30.0));
+    }
+
+    #[test]
+    fn no_cliff_at_the_tolerance_boundary() {
+        // One note 29 vs 31 cents off: the hard 30-cent cutoff used to flip
+        // it from "in scale" to "foreign"; now the fit barely changes.
+        let fit = |off: f64| {
+            let mut a = analyzer();
+            let mut melody = detuned_melody(0.0);
+            melody[2].0 += off / 100.0;
+            let end = play(&mut a, 0.0, &melody);
+            let r = a.analyze(Some(&dataset()), Some(sp(Degree::Do, 0)), end);
+            let c = r
+                .candidates
+                .iter()
+                .find(|c| c.maqam == "test-maqam-a")
+                .unwrap()
+                .clone();
+            c.supporting
+                .iter()
+                .find_map(|e| match e {
+                    Evidence::ScaleFit { share } => Some(*share),
+                    _ => None,
+                })
+                .unwrap()
+        };
+        assert!((fit(29.0) - fit(31.0)).abs() < 0.01);
     }
 }
