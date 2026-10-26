@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [blacksmith-2vcpu-ubuntu-2404, blacksmith-2vcpu-windows-2025]
     steps:
       - uses: actions/checkout@v4
       # pitchforge-rs is fetched as a git dependency. While the repositories
@@ -35,7 +35,7 @@ jobs:
       - run: cargo test --workspace --all-features
 
   lint:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
       - name: Authenticate git dependencies
@@ -51,7 +51,7 @@ jobs:
 
   ui:
     name: "@naghma/ui"
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     defaults:
       run:
         working-directory: packages/naghma-ui
@@ -65,7 +65,7 @@ jobs:
       - run: npm test
 
   msrv:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.85
