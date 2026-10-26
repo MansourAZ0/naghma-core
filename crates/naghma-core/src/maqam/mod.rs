@@ -3,7 +3,7 @@
 //! Maqam and jins data is loaded as JSON ([`MaqamDataset`]) and validated.
 //! An optional sourced 24-EDO teaching dataset is explicitly provisional.
 //! Every dataset carries [`Provenance`]; applications must label anything
-//! that is not [`ProvenanceStatus::Validated`] accordingly and must not
+//! that is not [`ProvenanceStatus::Validated`](crate::tuning::ProvenanceStatus::Validated) accordingly and must not
 //! present synthetic test data as music theory.
 //!
 //! ## Model

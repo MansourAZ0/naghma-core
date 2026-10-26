@@ -9,7 +9,7 @@
 //!
 //! The DSP thread owns the capture stream (CPAL streams are not `Send` on
 //! every platform), drains the ring buffer, runs the
-//! [`Analyzer`](crate::analysis::Analyzer) and calls the application's
+//! [`Analyzer`] and calls the application's
 //! callback with lightweight [`AnalysisFrame`]s — raw audio never leaves
 //! the engine.
 

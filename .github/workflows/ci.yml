@@ -68,6 +68,8 @@ jobs:
     runs-on: blacksmith-2vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
+      - name: Authenticate git dependencies
+        run: git config --global url."https://x-access-token:${{ secrets.DEPS_TOKEN || github.token }}@github.com/".insteadOf "https://github.com/"
       - uses: dtolnay/rust-toolchain@1.85
       - uses: Swatinem/rust-cache@v2
       - run: cargo check -p naghma-core --lib --all-features
