@@ -48,9 +48,25 @@ pub trait TuningSystem {
 /// `N` equal divisions of the octave, anchored at Do.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[serde(try_from = "EqualTemperamentData")]
 pub struct EqualTemperament {
     divisions: u16,
     spelling: SpellingTable,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct EqualTemperamentData {
+    divisions: u16,
+    spelling: SpellingTable,
+}
+
+impl TryFrom<EqualTemperamentData> for EqualTemperament {
+    type Error = TuningError;
+
+    fn try_from(data: EqualTemperamentData) -> Result<Self, Self::Error> {
+        Self::new(data.divisions, data.spelling)
+    }
 }
 
 impl EqualTemperament {
@@ -577,6 +593,20 @@ mod tests {
         assert_eq!(m.note, note("Mi flat 4"));
         assert!((m.deviation_cents - 40.0).abs() < 1e-9);
         assert!(EqualTemperament::new(7, SpellingTable::default_24()).is_err());
+    }
+
+    #[test]
+    fn deserialization_preserves_equal_temperament_invariants() {
+        let valid = EqualTemperament::edo24();
+        let mut json = serde_json::to_value(&valid).unwrap();
+        assert_eq!(
+            serde_json::from_value::<EqualTemperament>(json.clone()).unwrap(),
+            valid
+        );
+        for divisions in [0, 7, 25] {
+            json["divisions"] = divisions.into();
+            assert!(serde_json::from_value::<EqualTemperament>(json.clone()).is_err());
+        }
     }
 
     #[test]

@@ -29,6 +29,8 @@ pub enum ObservationStatus {
     Aperiodic,
     /// Periodic, but outside the configured frequency range.
     OutOfRange,
+    /// The window contained NaN or infinity and could not be analysed.
+    InvalidInput,
 }
 
 /// One acoustic pitch measurement.

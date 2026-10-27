@@ -3,3 +3,22 @@
 # Local development overrides (e.g. [patch] to sibling checkouts). See README.
 /.cargo/config.toml
 node_modules/
+
+# Credentials, signing material and private local data
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.mobileprovision
+*.keystore
+*.jks
+*.log
+/.cargo/config.toml
+/local-data/
+/recordings/
+/calibration*.json
+/settings.local.json
+/release-source/

@@ -5,6 +5,19 @@ All notable changes are documented here ([Keep a Changelog](https://keepachangel
 
 ## [Unreleased]
 
+### Fixed
+- Validate EqualTemperament divisions during JSON deserialization.
+- Report non-finite audio windows without panicking; reset onset history and recover on valid input.
+
+### Changed
+- Add ObservationStatus::InvalidInput (serialized as `invalidInput`). Downstream
+  exhaustive matches must handle this new variant before adopting the next release.
+- Public CI no longer requires cross-repository dependency tokens; UI installs use npm ci.
+
+### Added
+- Accessible README, credits, privacy/contribution/release guides, audits, source
+  exporter, secret/dependency checks and dependency update configuration.
+
 ## [0.5.0] - 2026-10-25
 
 Measured against 85 labelled public oud recordings (docs/EVALUATION.md):

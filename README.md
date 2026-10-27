@@ -1,152 +1,145 @@
-# naghma-core
+# naghma-core · نغمة
 
-Arabic music theory and microtonality for software, plus a reusable
-real-time pitch-analysis pipeline.
+The shared music engine behind Watar and Ajnas.
 
-| Package | Purpose | Depends on |
-|-------|---------|------------|
-| [`naghma-core`](crates/naghma-core) | Fixed-Do solfège (Latin & Arabic), quarter-tones, tuning systems, transposition (sounding vs. player pitch), oud instrument models, fingerboard geometry, note tracking, maqam data structures | `serde`, `serde_json` |
-| [`naghma-audio`](crates/naghma-audio) | CPAL microphone capture, lock-free buffering, DSP worker producing `naghma-core` observations; labelled simulation source | `naghma-core`, [`pitchforge`](https://github.com/MansourAZ0/pitchforge-rs), `cpal`, `rtrb` |
-| [`@naghma/ui`](packages/naghma-ui) | Shared React rendering: solfège labels, SVG quarter-tone accidentals, live frame store, cents meter | `react` (peer) |
+`naghma-core` turns a measured frequency into a useful musical reading: a note
+name, octave, and distance from the target pitch. It supports Arabic and Latin
+solfège, quarter-tones, oud tunings, fingerboard positions, and sourced maqam
+illustrations.
 
-`naghma-core` is UI-framework independent and does no I/O. Applications
-(*watar-tuner*, *Ajnas*) consume these crates instead of copying code from
-each other.
+**Early development:** the libraries are 0.x and their APIs can change.
+The current focus is Arabic maqam music and the oud, rather than every Eastern
+music tradition.
 
-> **Status:** 0.x, early development. See [docs/PROVISIONAL.md](docs/PROVISIONAL.md)
-> for musical decisions awaiting confirmation.
+## The three packages
 
-## Core ideas
+| Package | What it does | Needs a microphone? |
+| --- | --- | --- |
+| [`naghma-core`](crates/naghma-core) | Music theory, naming, tuning, note tracking, maqam data and ranking. No device or file I/O. | No |
+| [`naghma-audio`](crates/naghma-audio) | Microphone capture and a background analysis worker. Also supports simulation and offline audio. | Optional |
+| [`@naghma/ui`](packages/naghma-ui) | React note labels, quarter-tone symbols, a tuning meter and live display helpers. | No |
+
+The audio worker uses [pitchforge-rs](https://github.com/MansourAZ0/pitchforge-rs)
+for pitch detection. [Watar](https://github.com/MansourAZ0/watar-tuner) and
+[Ajnas](https://github.com/MansourAZ0/Ajnas) use these packages independently;
+neither application depends on the other.
 
 ```text
-frequency ──► Pitch (continuous, never rounded)
-                 │ Transposition (m_player = m_sounding − t)
-                 ├──────────────► player pitch ──► TuningSystem ──► SpelledNote + cents
-                 └──────────────► sounding pitch ─► TuningSystem ──► SpelledNote + cents
+audio → pitchforge → frequency → naghma-core → note names and cents
+                         ↑
+               naghma-audio handles capture and streaming
 ```
 
-* **Two identities per note.** Every reading has a *sounding* (concert)
-  note and a *player* note. An oud tuned −2 semitones that sounds Do4 is
-  shown to the player as **Re4**. The measured frequency is never altered.
-* **Solfège only.** Do Re Mi Fa Sol La Si / دو ري مي فا صول لا سي.
-  No Western letter names exist in the API.
-* **Quarter-tones are first-class.** Accidentals are integer quarter-tone
-  steps (−4…+4); 24-EDO is the default tuning, custom intonation profiles
-  can place targets anywhere.
-* **Octaves follow spelling.** *Do half-flat 4* sounds below Do4 but is
-  written in octave 4.
-* **Sourced, provisional maqam illustrations.** The validating maqam loader
-  requires provenance. Optional eight-maqam teaching data follows documented
-  notation, with independent alternatives and nonperiodic Saba registers.
-  Numeric targets approximate written notation in 24-EDO, not exact intonation.
+## What makes it useful for Arabic music?
 
-## Example
+- **Quarter-tones:** the default grid divides an octave into 24 equal steps.
+  Each step is 50 cents; 100 cents is one semitone.
+- **Flexible intonation:** custom profiles can place targets between grid steps.
+  Real maqam intonation is not universally equal-tempered.
+- **Fixed-Do solfège:** Do Re Mi Fa Sol La Si, or دو ري مي فا صول لا سي,
+  with quarter-tone accidentals.
+- **Player and sounding names:** if an oud is tuned two semitones low, the
+  player's Re4 sounds Do4. Both names are kept, along with the original Hz.
+- **Oud geometry:** calculate possible finger positions from string length and
+  tuning. The bundled six-course tuning is an example, not a universal standard.
+- **Maqam structure:** source-labelled ajnas, upper-jins alternatives,
+  transposition, and register-specific Saba examples.
+- **Imperfect playing:** recognition uses a configurable tolerance and can
+  estimate an instrument's overall tuning offset.
 
-```rust
-use naghma_core::interpret::PitchContext;
-use naghma_core::notation::{LabelOptions, Script};
-use naghma_core::pitch::{IntervalUnit, Transposition};
+These are additions around a general-purpose pitch detector. They do not require
+changing a frequency into a Western note first. See [credits](CREDITS.md) for
+algorithm authorship, related prior work, and the boundary between the libraries.
 
-let ctx = PitchContext {
-    transposition: Transposition::new(-2.0, IntervalUnit::Semitone),
-    ..PitchContext::default()
-};
-let reading = ctx.read(261.63).unwrap();
-assert_eq!(reading.sounding.note.to_string(), "Do4");
-assert_eq!(reading.player.note.to_string(), "Re4");
+## Try it
 
-let arabic = reading.player.note.label(&LabelOptions { script: Script::Arabic, ..Default::default() });
-assert_eq!(arabic.text, "ري4");
-```
-
-Live analysis:
+Install current stable Rust. Linux microphone builds also need ALSA headers
+(`libasound2-dev` on Debian/Ubuntu).
 
 ```sh
-cargo run --release -p naghma-audio --example listen -- 10              # microphone
-cargo run --release -p naghma-audio --example listen -- 10 --simulate   # synthetic, labelled
+git clone https://github.com/MansourAZ0/naghma-core.git
+cd naghma-core
+cargo test --workspace --locked
+cargo run --release -p naghma-audio --example listen -- 10 --simulate
 ```
 
-## Sourced maqam reference
-
-`MaqamDataset::teaching_eight_24edo()` returns opt-in source-labelled illustrations
-of Saba, Nahawand, Ajam, Bayati, Sikah, Hijaz, Rast and Kurd. See the
-[research record](docs/MAQAMAT_RESEARCH.md) for source links and limits. Schema 2
-keeps upper-jins tonal centres, alternatives and octave periodicity explicit;
-legacy schema-1 JSON remains supported.
-
-```rust
-use naghma_core::maqam::MaqamDataset;
-let data = MaqamDataset::teaching_eight_24edo();
-let bayati = data.maqam("bayati").unwrap();
-let notes = bayati.realize_variant("La3".parse().unwrap(), Some("rast-upper")).unwrap();
-assert_eq!(notes[5].note.to_string(), "Fa𝄲4");
-```
-
-An [interactive tonic reference](docs/reference/maqamat-tonics.html) embeds data
-exported by the Rust spelling API, including all 24 tonic classes. Its source
-values can be regenerated with:
+The simulation plays generated notes through the analysis pipeline and is
+labelled as synthetic. To listen through your microphone instead:
 
 ```sh
-cargo run -p naghma-core --release --example export_maqam_reference
+cargo run --release -p naghma-audio --example listen -- 10
 ```
 
-### Recognition accuracy
+On macOS, allow microphone access for the launching terminal or app. Opening the
+device times out after 20 seconds if the permission prompt is left unanswered.
+Windows device behaviour still needs field validation.
 
-`MaqamAnalyzer` is a heuristic ranking, measured against labelled public oud
-recordings in [docs/EVALUATION.md](docs/EVALUATION.md): on a held-out set the
-stated maqam is the best candidate in 63% of live analyses and among the best
-three in 88% (Sikah remains weak). It tolerates imperfect intonation:
-`tolerance_cents` (default 30 cents = 30% of a semitone) is a soft accepted
-error, and the instrument's overall tuning offset is estimated and removed.
-Re-run the measurement with:
+## Use the library
 
-```sh
-cargo run --release -p naghma-audio --example eval_maqam -- manifest.json
-```
-
-## Using from another repository
+The existing Git release is `v0.5.0`; fixes on the working branch need a new release.
+Add only the crates you need:
 
 ```toml
 [dependencies]
-naghma-core  = { git = "https://github.com/MansourAZ0/naghma-core", tag = "v0.5.0" }
+naghma-core = { git = "https://github.com/MansourAZ0/naghma-core", tag = "v0.5.0" }
 naghma-audio = { git = "https://github.com/MansourAZ0/naghma-core", tag = "v0.5.0" }
 ```
 
-For local development against sibling checkouts, create a gitignored
-`.cargo/config.toml` in the consuming repository:
+```rust
+use naghma_core::interpret::PitchContext;
+use naghma_core::pitch::{IntervalUnit, Transposition};
 
-```toml
-[patch."https://github.com/MansourAZ0/naghma-core"]
-naghma-core  = { path = "../naghma-core/crates/naghma-core" }
-naghma-audio = { path = "../naghma-core/crates/naghma-audio" }
-
-[patch."https://github.com/MansourAZ0/pitchforge-rs"]
-pitchforge = { path = "../pitchforge-rs" }
+let context = PitchContext {
+    transposition: Transposition::new(-2.0, IntervalUnit::Semitone),
+    ..PitchContext::default()
+};
+let reading = context.read(261.63).unwrap();
+assert_eq!(reading.sounding.note.to_string(), "Do4");
+assert_eq!(reading.player.note.to_string(), "Re4");
 ```
 
-While the repositories are private, Cargo needs `net.git-fetch-with-cli =
-true` (so it uses your git credentials) and CI needs a `DEPS_TOKEN` secret
-with read access to the dependency repositories.
+For audio without device capture, set `default-features = false` on
+`naghma-audio`. The pure `naghma-core` crate has no audio-device dependency.
 
-## Platform notes
+## Maqam data and recognition
 
-* **macOS:** microphone access requires permission. Opening the device
-  blocks while the permission prompt is shown; `Engine::start` gives up
-  after 20 s with `EngineError::StartTimeout`. Command-line examples are
-  attributed to the terminal app that launched them.
-* **Linux:** needs ALSA development headers (`libasound2-dev`) for CPAL.
-* **Windows:** untested so far.
+`MaqamDataset::teaching_eight_24edo()` loads optional illustrations of Saba,
+Nahawand, Ajam, Bayati, Sikah, Hijaz, Rast and Kurd. Their intervals approximate
+written notation; they are **not exact rules for performance intonation**.
+See the [source record](docs/MAQAMAT_RESEARCH.md),
+[provisional choices](docs/PROVISIONAL.md), and
+[interactive tonic reference](docs/reference/maqamat-tonics.html).
+
+Recognition ranks possible maqamat from recent notes. Scores are heuristics,
+not probabilities, and a pitch set alone does not describe a complete maqam.
+The recorded evaluation reports 63% top-one and 88% top-three accuracy on its
+held-out live analyses; Sikah remains weak. These are historical results from a
+small corpus, not a new measurement or a guarantee. See
+[evaluation methods, recordings and limitations](docs/EVALUATION.md).
 
 ## Development
 
 ```sh
-cargo test --workspace --release
-cargo clippy --workspace --all-targets
+cargo fmt --all --check
+cargo test --workspace --all-features --locked
+cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+cd packages/naghma-ui
+npm ci
+npm run typecheck
+npm test
 ```
 
-MSRV: Rust 1.85.
+The pure crate declares Rust 1.85 as its minimum. The audio package and full
+workspace should be developed with current stable Rust. The UI uses Node 24+.
+See [contributing](CONTRIBUTING.md) for local dependency overrides.
 
-## License
+## Credits and license
 
-Licensed under either of [Apache License, Version 2.0](LICENSE-APACHE) or
-[MIT license](LICENSE-MIT) at your option.
+The pitch layer implements YIN by **Alain de Cheveigné and Hideki Kawahara**.
+[Alessandro Genova's pitch-detection](https://github.com/alesgenova/pitch-detection)
+is acknowledged as related Rust prior work; a source-code fork is not established
+by the available history. Arabic music interpretation and oud support live here.
+See [credits](CREDITS.md) and [third-party notices](THIRD_PARTY_NOTICES.md).
+
+Project code: [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.
+Read the [release guide](docs/OPEN_SOURCE.md) before publishing source or binaries.

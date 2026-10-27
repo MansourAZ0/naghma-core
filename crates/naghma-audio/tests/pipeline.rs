@@ -126,6 +126,23 @@ fn silence_and_noise_produce_no_notes() {
 }
 
 #[test]
+fn nonfinite_input_is_reported_and_analysis_recovers() {
+    use naghma_core::events::ObservationStatus;
+    for bad in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+        let mut samples = signals::sine(220.0, SR, SR as usize, 0.5, 0.0);
+        samples[0] = bad;
+        let frames = run(&samples, PitchContext::default());
+        let first = &frames[0];
+        assert_eq!(first.observation.status, ObservationStatus::InvalidInput);
+        assert_eq!(first.observation.frequency_hz, None);
+        assert_eq!(first.observation.confidence, 0.0);
+        assert!(first.onset_strength_db.is_none());
+        assert!(frames.last().unwrap().observation.frequency_hz.is_some());
+        assert!(frames.iter().all(|f| f.observation.level_db.is_finite()));
+    }
+}
+
+#[test]
 fn onset_to_display_latency() {
     let melody = [("La2", 0.6), ("Re3", 0.6), ("Sol3", 0.6), ("Do4", 0.6)];
     let (samples, onsets) = render(&melody, Transposition::NONE);

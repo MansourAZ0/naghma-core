@@ -199,6 +199,8 @@ impl Analyzer {
     }
 
     /// Feed mono samples; `on_frame` is called for each completed window.
+    /// Non-finite windows produce an unvoiced `InvalidInput` observation;
+    /// onset history is reset and analysis resumes on the next valid window.
     pub fn push(&mut self, samples: &[f32], mut on_frame: impl FnMut(AnalysisFrame)) {
         let Self {
             sample_rate,
@@ -216,10 +218,17 @@ impl Analyzer {
             let t0 = Instant::now();
             *now_s = (start + window as u64) as f64 / sr;
 
+            let estimate = yin.detect(w);
+
             // Onset detection on the newest hop. On the very first window
             // feed everything so the detector has history.
             let mut onset_hit = None;
-            if !*warmed_up {
+            if estimate.is_err() {
+                // Do not let a device glitch poison the onset history or
+                // panic the DSP worker. Overlapping bad windows stay invalid.
+                onset.reset();
+                *warmed_up = false;
+            } else if !*warmed_up {
                 for (i, block) in w.chunks(hop).enumerate() {
                     if let Some(o) = onset.process(block) {
                         onset_hit = Some((start + (i * hop) as u64, o.strength_db));
@@ -230,22 +239,25 @@ impl Analyzer {
                 onset_hit = Some((start + (window - hop) as u64, o.strength_db));
             }
 
-            let est = yin
-                .detect(w)
-                .expect("framer yields windows of the detector's size");
-            let observation = PitchObservation {
+            let mut observation = PitchObservation {
                 time_s: (start as f64 + window as f64 / 2.0) / sr,
                 window_s: window as f64 / sr,
-                status: match est.voicing {
+                status: ObservationStatus::InvalidInput,
+                frequency_hz: None,
+                confidence: 0.0,
+                level_db: -240.0,
+            };
+            if let Ok(est) = estimate {
+                observation.status = match est.voicing {
                     Voicing::Voiced => ObservationStatus::Voiced,
                     Voicing::Unvoiced(UnvoicedReason::Silence) => ObservationStatus::Silence,
                     Voicing::Unvoiced(UnvoicedReason::OutOfRange) => ObservationStatus::OutOfRange,
                     Voicing::Unvoiced(_) => ObservationStatus::Aperiodic,
-                },
-                frequency_hz: est.frequency(),
-                confidence: est.confidence,
-                level_db: 20.0 * est.diagnostics.rms.max(1e-12).log10(),
-            };
+                };
+                observation.frequency_hz = est.frequency();
+                observation.confidence = est.confidence;
+                observation.level_db = 20.0 * est.diagnostics.rms.max(1e-12).log10();
+            }
             let update = tracker.update(&observation, onset_hit.map(|(s, _)| s as f64 / sr));
             on_frame(AnalysisFrame {
                 observation,
