@@ -163,3 +163,58 @@ fn onset_to_display_latency() {
         assert!(*l < 120.0, "latency {l} ms");
     }
 }
+
+#[test]
+fn the_fast_attack_reading_is_never_later_and_keeps_the_names() {
+    // Clean synthetic note changes are read as soon as either window allows;
+    // the gain (85 -> 64 ms median) shows on recorded oud, where the previous
+    // note still rings (docs/EVALUATION.md).
+    let melody = [("La2", 0.6), ("Re3", 0.6), ("Sol3", 0.6), ("Do4", 0.6)];
+    let (samples, onsets) = render(&melody, Transposition::NONE);
+    let shown = |fast_attack: bool| {
+        let frames = analyze_samples(
+            &samples,
+            SR,
+            AnalysisConfig {
+                fast_attack,
+                ..AnalysisConfig::default()
+            },
+            TrackerConfig::default(),
+            PitchContext::default(),
+        )
+        .unwrap();
+        let mut latencies = Vec::new();
+        for f in &frames {
+            if f.update.started.is_some() {
+                let k = latencies.len();
+                latencies.push((f.end_sample as f64 / SR - onsets[k]) * 1000.0);
+            }
+        }
+        let ended: Vec<String> = frames
+            .iter()
+            .filter_map(|f| f.update.ended.as_ref())
+            .map(|e| e.player.note.to_string())
+            .collect();
+        (latencies, ended)
+    };
+    let (slow, slow_names) = shown(false);
+    let (fast, fast_names) = shown(true);
+    println!("onset → shown: full window {slow:.1?} ms, fast attack {fast:.1?} ms");
+    assert_eq!(fast_names, slow_names);
+    assert_eq!(fast.len(), melody.len());
+    for (f, s) in fast.iter().zip(&slow) {
+        assert!(f <= s, "fast {f} ms vs full window {s} ms");
+    }
+}
+
+#[test]
+fn the_fast_window_is_half_the_analysis_window_at_common_rates() {
+    for sr in [44_100.0, 48_000.0] {
+        assert_eq!(AnalysisConfig::default().fast_window(sr), Some(2048));
+    }
+    let off = AnalysisConfig {
+        fast_attack: false,
+        ..AnalysisConfig::default()
+    };
+    assert_eq!(off.fast_window(48_000.0), None);
+}

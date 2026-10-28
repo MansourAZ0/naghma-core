@@ -31,6 +31,10 @@ All notable changes are documented here ([Keep a Changelog](https://keepachangel
 - Public CI no longer requires cross-repository dependency tokens; UI installs use npm ci.
 
 ### Added
+- `AnalysisConfig::fast_attack` (default on): until a plucked note is shown,
+  read it from the newest 43 ms instead of the full 85 ms window. Median
+  attack-to-display time on recorded oud 85 ms -> 64 ms, with no more
+  tracking artefacts. `NoteTracker::awaiting_attack` reports that moment.
 - Sikah alternative "Huzam route" (Sikah; Hijaz on 3; Rast on 6, sourced
   from MaqamWorld). Sikah recognition at 10 s: 28% -> 43% (development) and
   23% -> 50% (held-out) of analyses.

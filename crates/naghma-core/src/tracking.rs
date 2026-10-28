@@ -81,6 +81,9 @@ fn default_true() -> bool {
     true
 }
 
+/// How long after a pluck [`NoteTracker::awaiting_attack`] stays `true`.
+pub const AWAIT_ATTACK_S: f64 = 0.25;
+
 /// `true` if `cents` is within 60 cents of an octave, a twelfth or two
 /// octaves (up or down).
 fn harmonic_jump(cents: f64) -> bool {
@@ -297,6 +300,16 @@ impl NoteTracker {
             None => LiveState::Listening,
         };
         out
+    }
+
+    /// `true` while no note has been shown since a pluck less than
+    /// [`AWAIT_ATTACK_S`] before `now_s`: the moment a reading from a
+    /// shorter window helps most.
+    pub fn awaiting_attack(&self, now_s: f64) -> bool {
+        self.active.is_none()
+            && self
+                .last_onset_s
+                .is_some_and(|t| now_s - t <= AWAIT_ATTACK_S)
     }
 
     /// End the current note (e.g. when the stream stops).

@@ -4,8 +4,8 @@ use naghma_core::events::{ObservationStatus, PitchObservation};
 use naghma_core::interpret::PitchContext;
 use naghma_core::tracking::{NoteTracker, TrackerConfig, TrackerUpdate};
 use pitchforge::{
-    ConfigError, Framer, OnsetConfig, OnsetDetector, PitchDetector, UnvoicedReason, Voicing, Yin,
-    YinConfig,
+    ConfigError, Framer, OnsetConfig, OnsetDetector, PitchDetector, PitchEstimate, UnvoicedReason,
+    Voicing, Yin, YinConfig,
 };
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
@@ -29,6 +29,17 @@ pub struct AnalysisConfig {
     pub silence_threshold_db: f64,
     /// Onset detector rise threshold, dB.
     pub onset_rise_db: f64,
+    /// Name a plucked note from a shorter window (the newest half of the
+    /// analysis window, or less) until the note is shown. A full window
+    /// must be mostly past the attack before it reads the new note; a short
+    /// one gets there sooner. The full window then confirms the name, or the
+    /// tracker renames the note while its attack settles.
+    #[serde(default = "yes")]
+    pub fast_attack: bool,
+}
+
+fn yes() -> bool {
+    true
 }
 
 impl Default for AnalysisConfig {
@@ -42,6 +53,7 @@ impl Default for AnalysisConfig {
             yin_threshold: yin.threshold,
             silence_threshold_db: yin.silence_threshold_db,
             onset_rise_db: OnsetConfig::default().rise_db,
+            fast_attack: true,
         }
     }
 }
@@ -81,6 +93,18 @@ impl AnalysisConfig {
             window / 8
         };
         (window, hop)
+    }
+
+    /// Window of the fast attack reading at `sample_rate`, if it is enabled
+    /// and shorter than the analysis window: ≈ 40 ms rounded up to a power
+    /// of two, at least two periods of `min_frequency`.
+    pub fn fast_window(&self, sample_rate: f64) -> Option<usize> {
+        let (window, _) = self.resolved_window_hop(sample_rate);
+        let required = Yin::required_window_size(sample_rate, &self.yin_config()).ok()?;
+        let fast = ((sample_rate * 0.04).round() as usize)
+            .max(required)
+            .next_power_of_two();
+        (self.fast_attack && fast < window).then_some(fast)
     }
 }
 
@@ -126,6 +150,8 @@ pub struct Analyzer {
     hop: usize,
     framer: Framer,
     yin: Yin,
+    /// Short-window detector and its window, for the fast attack reading.
+    fast: Option<(Yin, usize)>,
     onset: OnsetDetector,
     tracker: NoteTracker,
     warmed_up: bool,
@@ -143,6 +169,10 @@ impl Analyzer {
     ) -> Result<Self, ConfigError> {
         let (window, hop) = config.resolved_window_hop(sample_rate);
         let yin = Yin::new(sample_rate, window, config.yin_config())?;
+        let fast = config
+            .fast_window(sample_rate)
+            .map(|w| Yin::new(sample_rate, w, config.yin_config()).map(|y| (y, w)))
+            .transpose()?;
         let onset = OnsetDetector::new(
             sample_rate,
             OnsetConfig {
@@ -156,6 +186,7 @@ impl Analyzer {
             hop,
             framer: Framer::new(window, hop)?,
             yin,
+            fast,
             onset,
             tracker: NoteTracker::new(tracker, context),
             warmed_up: false,
@@ -208,6 +239,7 @@ impl Analyzer {
             hop,
             framer,
             yin,
+            fast,
             onset,
             tracker,
             warmed_up,
@@ -239,26 +271,46 @@ impl Analyzer {
                 onset_hit = Some((start + (window - hop) as u64, o.strength_db));
             }
 
-            let mut observation = PitchObservation {
-                time_s: (start as f64 + window as f64 / 2.0) / sr,
-                window_s: window as f64 / sr,
-                status: ObservationStatus::InvalidInput,
-                frequency_hz: None,
-                confidence: 0.0,
-                level_db: -240.0,
-            };
-            if let Ok(est) = estimate {
-                observation.status = match est.voicing {
-                    Voicing::Voiced => ObservationStatus::Voiced,
-                    Voicing::Unvoiced(UnvoicedReason::Silence) => ObservationStatus::Silence,
-                    Voicing::Unvoiced(UnvoicedReason::OutOfRange) => ObservationStatus::OutOfRange,
-                    Voicing::Unvoiced(_) => ObservationStatus::Aperiodic,
+            let observe = |estimate: Result<PitchEstimate, _>, length: usize| {
+                let mut observation = PitchObservation {
+                    time_s: (start as f64 + window as f64 - length as f64 / 2.0) / sr,
+                    window_s: length as f64 / sr,
+                    status: ObservationStatus::InvalidInput,
+                    frequency_hz: None,
+                    confidence: 0.0,
+                    level_db: -240.0,
                 };
-                observation.frequency_hz = est.frequency();
-                observation.confidence = est.confidence;
-                observation.level_db = 20.0 * est.diagnostics.rms.max(1e-12).log10();
+                if let Ok(est) = estimate {
+                    observation.status = match est.voicing {
+                        Voicing::Voiced => ObservationStatus::Voiced,
+                        Voicing::Unvoiced(UnvoicedReason::Silence) => ObservationStatus::Silence,
+                        Voicing::Unvoiced(UnvoicedReason::OutOfRange) => {
+                            ObservationStatus::OutOfRange
+                        }
+                        Voicing::Unvoiced(_) => ObservationStatus::Aperiodic,
+                    };
+                    observation.frequency_hz = est.frequency();
+                    observation.confidence = est.confidence;
+                    observation.level_db = 20.0 * est.diagnostics.rms.max(1e-12).log10();
+                }
+                observation
+            };
+            let onset_s = onset_hit.map(|(s, _)| s as f64 / sr);
+            let mut observation = observe(estimate, window);
+            // Until a plucked note is shown, read it from the newest samples.
+            if let Some((fast, length)) = fast.as_mut() {
+                let length = *length;
+                let latest = (start + window as u64) as f64 / sr;
+                if observation.status != ObservationStatus::InvalidInput
+                    && (onset_s.is_some() || tracker.awaiting_attack(latest))
+                {
+                    let short = observe(fast.detect(&w[window - length..]), length);
+                    if short.status == ObservationStatus::Voiced {
+                        observation = short;
+                    }
+                }
             }
-            let update = tracker.update(&observation, onset_hit.map(|(s, _)| s as f64 / sr));
+            let update = tracker.update(&observation, onset_s);
             on_frame(AnalysisFrame {
                 observation,
                 update,

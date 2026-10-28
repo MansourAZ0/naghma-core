@@ -220,6 +220,18 @@ is renamed; before this change the same reading was a separate short note
 analysis window's lag. Maqam recognition with the new tracker (10 s window):
 development 54% → 54%, held-out 46% → 49% of analyses.
 
+**Fast attack reading.** A full 85 ms window must be mostly past a pluck
+before it reads the new note. Until a plucked note is shown, the analyser
+now reads it from the newest 43 ms (`fastAttack`), and the full window then
+confirms the name or the tracker renames the note while it settles. On the
+same 89 clips the median attack → shown time fell from **85 ms to 64 ms**
+(p90 171 → 160 ms); splits (0.84 → 0.92/min) and octave flips (5.4 → 5.3/min)
+were unchanged, the wrong name was shown 3.6% instead of 2.6% of the time,
+and maqam recognition was unchanged (55% / 51% of analyses). A 2048-sample
+window throughout would reach 64 ms too but triples the artefacts (splits
+7.5/min, octave flips 14.3/min). On clean synthetic plucks both paths show
+the note 48–56 ms after the attack.
+
 Limits: an octave error that lasts a whole note from its attack (the
 detector reading the second harmonic of a pluck throughout) is not caught;
 the remaining "octave flips" include real octave leaps whose pluck the
