@@ -8,7 +8,7 @@ analysis every `--interval` seconds.
 
 ```text
 cargo run --release -p naghma-audio --example eval_maqam -- path/to/manifest.json \
-    [--interval 2] [--window 30] [--tolerance 30] [--config '{"minScore":0.5}'] \
+    [--interval 2] [--window 10] [--tolerance 30] [--config '{"minScore":0.5}'] \
     [--tracker '{"minConfidence":0.8}'] [--kind taqsim,doulab] [--only id1,id2] \
     [--verbose] [--evidence] [--json report.json]
 ```
@@ -145,6 +145,35 @@ commercial Sikah recording (+15 c) where the performed intonation itself is
 far from the 24-EDO grid. The cumulative effect of the changes is far larger
 than any single row because they interact (soft membership alone was neutral
 before the tonic weighting changed).
+
+## Ten-second window (unreleased)
+
+The maqam window was shortened from 30 s to 10 s at a player's request: in a
+taqsim, 30 s mixes passages in different maqamat that share most notes. Two
+changes recover part of the evidence a short window loses. The tuning offset
+is estimated over the last 60 s (it belongs to the instrument, not to the
+passage), and the maqam and tonic that led the previous analysis get a small
+bonus (`continuity`, 0.1), so a near-tie does not flip the display.
+
+| Set | 30 s (0.5.0) | 10 s plain | 10 s + tuning context + continuity |
+| --- | --- | --- | --- |
+| Development (54), step1 / step3 | 71% / 90% | 50% / 81% | **54% / 82%** |
+| Held-out (31), step1 / step3 | 63% / 88% | 44% / 79% | **46% / 79%** |
+| Development scale demos and doulabs (14), step1 | 75% | — | 74% |
+| Development taqasim (40), step1 | 70% | — | 51% |
+
+Continuity weights 0 / 0.03 / 0.06 / 0.1 / 0.15 gave development step1 50% /
+52% / 53% / 54% / 54%; weights for coverage, tonic, final rest, minimum note
+length and tolerance moved it by at most two points at 10 s.
+
+**These numbers understate a short window.** Every label covers a whole
+clip. When a taqsim moves to another maqam for a while, a 10 s window that
+follows it is counted wrong. Material that stays in one maqam (scale demos,
+doulabs) scores the same at 10 s as at 30 s, and with 10 s every clip was
+named correctly at some point (30 s: 3 never were). A fair measurement needs
+time-stamped labels from a musician. Maqamat that share a pitch set on a
+related tonic (Sikah/Bayati/Rast, Hijaz/Nahawand/Kurd) are the main
+confusions, as before; ten seconds simply holds fewer notes to separate them.
 
 ## Limits
 

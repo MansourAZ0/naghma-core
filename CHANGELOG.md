@@ -10,6 +10,14 @@ All notable changes are documented here ([Keep a Changelog](https://keepachangel
 - Report non-finite audio windows without panicking; reset onset history and recover on valid input.
 
 ### Changed
+- The maqam window is now **10 s** (was 30 s), so a taqsim's sections in
+  different maqamat are no longer mixed together. The instrument's tuning
+  offset is still estimated over the last 60 s (`tuningWindowS`), and a small
+  `continuity` weight (0.1) keeps the current reading through near-ties.
+  Development / held-out share of analyses naming the clip's stated maqam:
+  71% / 63% at 30 s -> 54% / 46% at 10 s (a plain 10 s window gives 50% / 44%).
+  Scale demos and doulabs, which stay in one maqam, are unchanged (74% vs 75%);
+  the difference is in taqasim, whose clip labels ignore modulation.
 - Add ObservationStatus::InvalidInput (serialized as `invalidInput`). Downstream
   exhaustive matches must handle this new variant before adopting the next release.
 - Public CI no longer requires cross-repository dependency tokens; UI installs use npm ci.

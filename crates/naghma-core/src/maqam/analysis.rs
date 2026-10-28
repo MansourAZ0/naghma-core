@@ -64,6 +64,11 @@ pub struct ScoreWeights {
     pub ajnas: f64,
     /// Bonus per matched characteristic phrase (capped at 3).
     pub phrase: f64,
+    /// Bonus for the maqam and tonic that led the previous analysis. A
+    /// maqam lasts longer than one analysis step, so a near-tie keeps the
+    /// current reading instead of flickering; clear evidence still wins.
+    #[serde(default)]
+    pub continuity: f64,
 }
 
 impl Default for ScoreWeights {
@@ -77,6 +82,7 @@ impl Default for ScoreWeights {
             resting: 0.2,
             ajnas: 0.3,
             phrase: 0.15,
+            continuity: 0.1,
         }
     }
 }
@@ -85,8 +91,16 @@ impl Default for ScoreWeights {
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct AnalyzerConfig {
-    /// Length of the rolling history in seconds.
+    /// Length of the rolling window scored for the maqam, in seconds.
+    ///
+    /// Short enough that a taqsim's sections are not mixed together: notes
+    /// from a passage in another maqam leave the window quickly.
     pub window_s: f64,
+    /// Seconds of playing used to estimate the instrument's tuning offset.
+    /// Tuning belongs to the instrument, not the maqam, so it is estimated
+    /// over a longer span than [`Self::window_s`] (never shorter).
+    #[serde(default = "default_tuning_window")]
+    pub tuning_window_s: f64,
     /// Minimum notes in the window before any ranking is reported.
     pub min_notes: usize,
     /// Minimum distinct pitch classes before any ranking is reported.
@@ -125,7 +139,8 @@ pub struct AnalyzerConfig {
 impl Default for AnalyzerConfig {
     fn default() -> Self {
         Self {
-            window_s: 30.0,
+            window_s: 10.0,
+            tuning_window_s: default_tuning_window(),
             min_notes: 6,
             min_distinct: 4,
             tolerance_cents: 30.0,
@@ -139,6 +154,10 @@ impl Default for AnalyzerConfig {
             weights: ScoreWeights::default(),
         }
     }
+}
+
+fn default_tuning_window() -> f64 {
+    60.0
 }
 
 /// One note in the analysis history.
@@ -264,6 +283,8 @@ pub struct MaqamAnalysis {
 pub struct MaqamAnalyzer {
     config: AnalyzerConfig,
     history: VecDeque<HistoryNote>,
+    /// Maqam id and tonic pitch class that led the previous analysis.
+    leader: Option<(String, i64)>,
 }
 
 impl MaqamAnalyzer {
@@ -272,6 +293,7 @@ impl MaqamAnalyzer {
         Self {
             config,
             history: VecDeque::new(),
+            leader: None,
         }
     }
 
@@ -288,6 +310,7 @@ impl MaqamAnalyzer {
     /// Forget all notes.
     pub fn clear(&mut self) {
         self.history.clear();
+        self.leader = None;
     }
 
     /// Add a completed (or ongoing, with `now_s`) note event.
@@ -308,9 +331,10 @@ impl MaqamAnalyzer {
         self.history.push_back(note);
     }
 
-    /// Drop notes that ended before `now_s − window_s`.
+    /// Drop notes that ended before both the maqam window and the tuning
+    /// window.
     pub fn prune(&mut self, now_s: f64) {
-        let cutoff = now_s - self.config.window_s;
+        let cutoff = now_s - self.config.window_s.max(self.config.tuning_window_s);
         while self
             .history
             .front()
@@ -330,15 +354,21 @@ impl MaqamAnalyzer {
     ) -> MaqamAnalysis {
         self.prune(now_s);
         let config = &self.config;
-        let raw: Vec<HistoryNote> = self
+        let context: Vec<HistoryNote> = self
             .history
             .iter()
             .filter(|n| n.duration_s >= config.min_note_s)
             .copied()
             .collect();
+        let cutoff = now_s - config.window_s;
+        let raw: Vec<HistoryNote> = context
+            .iter()
+            .filter(|n| n.start_s + n.duration_s >= cutoff)
+            .copied()
+            .collect();
         let window = (raw.first().map_or(now_s, |n| n.start_s), now_s);
         let offset = config.tuning_offset_cents.unwrap_or_else(|| {
-            estimate_tuning_offset(&raw, config.max_tuning_offset_cents).unwrap_or(0.0)
+            estimate_tuning_offset(&context, config.max_tuning_offset_cents).unwrap_or(0.0)
         });
         let notes = prepare(&raw, offset);
         let mut analysis = MaqamAnalysis {
@@ -352,14 +382,28 @@ impl MaqamAnalyzer {
         };
         let distinct = distinct_classes(&notes);
         if notes.len() < config.min_notes || distinct < config.min_distinct {
+            self.leader = None;
             return analysis;
         }
         let Some(dataset) = dataset.filter(|d| !d.maqamat.is_empty()) else {
+            self.leader = None;
             analysis.status = AnalysisStatus::Unknown;
             return analysis;
         };
 
         let mut candidates = rank(&notes, dataset, tonic, config);
+        if let Some((maqam, class)) = &self.leader {
+            if let Some(c) = candidates
+                .iter_mut()
+                .find(|c| &c.maqam == maqam && c.tonic.quarter_tone_class() == *class)
+            {
+                c.score += config.weights.continuity;
+                candidates.sort_by(|a, b| b.score.total_cmp(&a.score));
+            }
+        }
+        self.leader = candidates
+            .first()
+            .map(|c| (c.maqam.clone(), c.tonic.quarter_tone_class()));
         let best = candidates.first().map_or(0.0, |c| c.score);
         analysis.status = if best < config.min_score {
             AnalysisStatus::Unknown
@@ -1235,5 +1279,76 @@ mod tests {
         assert!(!a_of(&kept).contradicting.is_empty());
         assert!(a_of(&filtered).contradicting.is_empty());
         assert_eq!(filtered.notes, kept.notes - 3);
+    }
+
+    #[test]
+    fn old_notes_leave_the_window_but_still_set_the_tuning() {
+        let run = |tuning_window_s: f64| {
+            let mut a = MaqamAnalyzer::new(AnalyzerConfig {
+                tuning_window_s,
+                ..AnalyzerConfig::default()
+            });
+            let mut t = 0.0;
+            for _ in 0..3 {
+                t = play(&mut a, t, &detuned_melody(15.0));
+            }
+            // Twenty seconds later, a few notes: too little to tune from.
+            let end = play(
+                &mut a,
+                t + 20.0,
+                &[(60.15, 0.3), (62.15, 0.3), (65.15, 0.3)],
+            );
+            a.analyze(Some(&dataset()), None, end)
+        };
+        let r = run(60.0);
+        assert_eq!(r.notes, 3, "only the last ten seconds are scored");
+        assert!((r.tuning_offset_cents - 15.0).abs() < 1.0, "{r:#?}");
+        assert_eq!(run(10.0).tuning_offset_cents, 0.0);
+    }
+
+    #[test]
+    fn a_near_tie_keeps_the_current_maqam() {
+        let mut ds = dataset();
+        let mut twin = ds.maqamat[0].clone();
+        twin.id = "test-maqam-a-twin".into();
+        twin.related.clear();
+        twin.modulations.clear();
+        twin.ascending[6].cents = 1000.0;
+        ds.maqamat.push(twin);
+        let run = |continuity: f64| {
+            let mut a = MaqamAnalyzer::new(AnalyzerConfig {
+                weights: ScoreWeights {
+                    continuity,
+                    ..ScoreWeights::default()
+                },
+                ..AnalyzerConfig::default()
+            });
+            // Clearly maqam A (step 6 at 1050 cents) ...
+            let t = play(&mut a, 0.0, &detuned_melody(0.0));
+            let first = a.analyze(Some(&ds), Some(sp(Degree::Do, 0)), t);
+            assert_eq!(first.candidates[0].maqam, "test-maqam-a");
+            // ... then a passage whose step 6 (1020 cents) leans to the twin.
+            let melody: Vec<(f64, f64)> = detuned_melody(0.0)
+                .into_iter()
+                .map(|(p, d)| if p == 70.5 { (70.2, 0.3) } else { (p, d) })
+                .collect();
+            let end = play(&mut a, t + 15.0, &melody);
+            a.analyze(Some(&ds), Some(sp(Degree::Do, 0)), end)
+                .candidates[0]
+                .maqam
+                .clone()
+        };
+        assert_eq!(run(0.0), "test-maqam-a-twin");
+        assert_eq!(run(ScoreWeights::default().continuity), "test-maqam-a");
+    }
+
+    #[test]
+    fn clear_forgets_the_current_maqam() {
+        let mut a = analyzer();
+        let end = play(&mut a, 0.0, &detuned_melody(0.0));
+        a.analyze(Some(&dataset()), None, end);
+        assert!(a.leader.is_some());
+        a.clear();
+        assert!(a.leader.is_none());
     }
 }

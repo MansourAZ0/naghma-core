@@ -2,7 +2,7 @@
 //!
 //! ```text
 //! cargo run --release -p naghma-audio --example eval_maqam -- manifest.json \
-//!     [--interval 2] [--window 30] [--tolerance 30] [--config '{"minScore":0.5}'] \
+//!     [--interval 2] [--window 10] [--tolerance 30] [--config '{"minScore":0.5}'] \
 //!     [--kind taqsim,doulab] [--only id1,id2] [--verbose] [--evidence] [--json report.json]
 //! ```
 //!
