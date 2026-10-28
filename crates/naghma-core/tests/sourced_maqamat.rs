@@ -315,3 +315,33 @@ fn notes_below_a_nonperiodic_register_compare_with_the_documented_octave() {
     assert_eq!(candidate.tonic_octave, Some(3));
     assert!(candidate.contradicting.is_empty(), "{candidate:#?}");
 }
+
+#[test]
+fn sikah_has_a_separate_huzam_route_with_hijaz_on_the_third() {
+    let ds = MaqamDataset::teaching_eight_24edo();
+    let sikah = ds.maqam("sikah").unwrap();
+    assert_eq!(
+        names("sikah", "Mi half-flat 4", Some("huzam-route")),
+        [
+            "Mi half-flat 4",
+            "Fa4",
+            "Sol4",
+            "La flat 4",
+            "Si4",
+            "Do5",
+            "Re5",
+            "Mi half-flat 5"
+        ]
+    );
+    let placements = sikah.placements(Some("huzam-route")).unwrap();
+    assert!(
+        placements
+            .iter()
+            .any(|p| p.jins == "hijaz" && p.on_step == 2)
+    );
+    // The primary illustration is unchanged.
+    assert_eq!(
+        names("sikah", "Mi half-flat 4", None)[3..5],
+        ["La4", "Si half-flat 4"]
+    );
+}
