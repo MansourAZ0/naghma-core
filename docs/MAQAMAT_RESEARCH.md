@@ -21,7 +21,7 @@ Each maqam, variant and jins has source URLs. The core remains framework-free.
 | [Nahawand](https://www.maqamworld.com/en/maqam/nahawand.php) | Do | Nahawand; Hijaz **or** Kurd on 5 |
 | [Ajam](https://www.maqamworld.com/en/maqam/ajam.php) | Do | Five-note Ajam; Upper Ajam **or** Nahawand on 5 |
 | [Bayati](https://www.maqamworld.com/en/maqam/bayati.php) | Re | Bayati; Nahawand **or** Rast on 4 |
-| [Sikah](https://www.maqamworld.com/en/maqam/sikah.php) | Mi half-flat | Sikah; Upper Rast on 3 (its tonic is degree 6); Rast on 6 |
+| [Sikah](https://www.maqamworld.com/en/maqam/sikah.php) | Mi half-flat | Sikah; Upper Rast on 3 (its tonic is degree 6); Rast on 6. Alternative: the [Huzam](https://www.maqamworld.com/en/maqam/huzam.php) route, Sikah; Hijaz on 3; Rast on 6 |
 | [Hijaz](https://www.maqamworld.com/en/maqam/hijaz.php) | Re | Hijaz; Nahawand **or** Rast on 4 |
 | [Rast](https://www.maqamworld.com/en/maqam/rast.php) | Do | Rast; Upper Rast **or** Nahawand on 5 |
 | [Kurd](https://www.maqamworld.com/en/maqam/kurd.php) | Re | Kurd; Nahawand on 4 |
@@ -89,11 +89,20 @@ recognition tests. Recognition has since been measured against 85 labelled
 public oud recordings ([EVALUATION.md](EVALUATION.md)); musician review of the
 data remains necessary.
 
-Measured intonation in those recordings departs from these conversions (for
-example a Sikah tonic about 14 cents below Mi natural rather than 50). The
-analyser absorbs this algorithmically — soft membership with an adjustable
-tolerance and global tuning-offset compensation — without changing the
-dataset's values.
+Single recordings depart from these conversions (the Sikah scale demo puts
+its tonic about 14 cents below Mi natural rather than 50). Measured over all
+85 recordings, though, most degrees sit within about 10 cents of the 24-EDO
+values on average, with a wide spread between players
+([EVALUATION.md](EVALUATION.md#performed-intonation-unreleased)). The
+analyser absorbs the spread algorithmically — soft membership with an
+adjustable tolerance and global tuning-offset compensation — without
+changing the dataset's values.
+
+Sikah has a second illustration, the Huzam route (Hijaz on the 3rd degree).
+MaqamWorld calls Huzam "by far the most common maqam in the Sikah family",
+and recordings labelled Sikah often follow it. It is an alternative of the
+Sikah entry, like the upper-jins routes of other maqamat, not a ninth
+maqam.
 
 ## Schema compatibility
 

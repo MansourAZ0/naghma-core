@@ -956,7 +956,70 @@
         }
       ],
       "octaveRepeating": true,
-      "variants": [],
+      "variants": [
+        {
+          "id": "huzam-route",
+          "name": {
+            "latin": "Huzam route (Hijaz on the 3rd)",
+            "arabic": "مسار الهزام (حجاز على الدرجة الثالثة)"
+          },
+          "ascending": [
+            {
+              "step": 0,
+              "cents": 0
+            },
+            {
+              "step": 1,
+              "cents": 150
+            },
+            {
+              "step": 2,
+              "cents": 350
+            },
+            {
+              "step": 3,
+              "cents": 450
+            },
+            {
+              "step": 4,
+              "cents": 750
+            },
+            {
+              "step": 5,
+              "cents": 850
+            },
+            {
+              "step": 6,
+              "cents": 1050
+            },
+            {
+              "step": 7,
+              "cents": 1200
+            }
+          ],
+          "ajnas": [
+            {
+              "jins": "sikah",
+              "onStep": 0,
+              "role": "lower"
+            },
+            {
+              "jins": "hijaz",
+              "onStep": 2,
+              "role": "upper"
+            },
+            {
+              "jins": "rast",
+              "onStep": 5,
+              "role": "upper"
+            }
+          ],
+          "sources": [
+            "https://www.maqamworld.com/en/maqam/huzam.php"
+          ],
+          "description": "Sikah on the tonic, Hijaz on the 3rd degree and Rast on the 6th: the scale of Maqam Huzam, which the source calls by far the most common maqam in the Sikah family. Recordings labelled Sikah often follow it."
+        }
+      ],
       "sources": [
         "https://www.maqamworld.com/en/maqam/sikah.php"
       ],
@@ -984,7 +1047,7 @@
       "phrases": [],
       "related": [],
       "modulations": [],
-      "description": "Plain Sikah illustration, not Huzam. The source describes it as a rare member of the family. Upper Rast spans the third to sixth degrees with its tonic at the sixth. Reference tonic: Mi half-flat."
+      "description": "Plain Sikah illustration; the Huzam route is a separate, scored alternative. The source describes it as a rare member of the family. Upper Rast spans the third to sixth degrees with its tonic at the sixth. Reference tonic: Mi half-flat."
     },
     {
       "id": "hijaz",

@@ -31,6 +31,12 @@ All notable changes are documented here ([Keep a Changelog](https://keepachangel
 - Public CI no longer requires cross-repository dependency tokens; UI installs use npm ci.
 
 ### Added
+- Sikah alternative "Huzam route" (Sikah; Hijaz on 3; Rast on 6, sourced
+  from MaqamWorld). Sikah recognition at 10 s: 28% -> 43% (development) and
+  23% -> 50% (held-out) of analyses.
+- `measure_intonation` and `tracker_artifacts` examples for real recordings.
+  Measured performed intonation is documented in docs/EVALUATION.md; it did
+  not improve recognition, so maqam data keeps its 24-EDO values.
 - Accessible README, credits, privacy/contribution/release guides, audits, source
   exporter, secret/dependency checks and dependency update configuration.
 

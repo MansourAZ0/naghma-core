@@ -146,6 +146,47 @@ far from the 24-EDO grid. The cumulative effect of the changes is far larger
 than any single row because they interact (soft membership alone was neutral
 before the tonic weighting changed).
 
+## Performed intonation (unreleased)
+
+`crates/naghma-audio/examples/measure_intonation.rs` measures where players
+put each degree. Per clip it removes the tuning offset, picks the tonic under
+which the stated maqam fits best (all 24 classes, 45 c tolerance), assigns
+each note to a scale degree when it is clearly nearest to one, and records
+the deviation from the 24-EDO illustration, weighted by duration.
+
+Development and held-out sets measured separately (weighted median
+deviation in cents; degrees heard in at least 3 clips of both sets):
+
+| Degree | Development | Held-out |
+| --- | --- | --- |
+| Bayati 2nd (Mi half-flat on Re) | −12 | −12 |
+| Bayati 5th (La on Re) | +8 | +16 |
+| Nahawand raised 7th (Si on Do) | +11 | +12 |
+| Rast 3rd (Mi half-flat on Do) | −4 | −4 |
+| Rast 7th (Si half-flat on Do) | −4 | −3 |
+| Saba 4th (Sol flat on Re) | −13 | +3 |
+| Sikah tonic (Mi half-flat) | −6 | +10 |
+| Sikah 5th (Si half-flat on Mi half-flat) | +12 | +30 |
+
+Most other degrees are within ±10 c in both sets; interquartile ranges are
+typically 10–30 c wide, wider for quarter-tones. Only a few shifts repeat
+in both sets (Bayati's 2nd about 12 c low, Nahawand's raised 7th about 11 c
+high), and a 30 c tolerance already covers them.
+
+**Measured positions do not improve recognition, so the dataset keeps its
+24-EDO values.** Scoring with per-degree positions measured on one set and
+evaluated on the other: held-out 49% → 49% of analyses (top-3 78% → 80%),
+development 54% → 56%. A musician should review the shifts before any
+application presents them as targets.
+
+The held-out Sikah recordings lower their 4th degree toward La flat (median
+−43 c from La) and raise their 5th toward Si natural (+30 c from Si
+half-flat): the direction of Hijaz on the 3rd degree, the scale of Maqam
+Huzam.
+Adding that route as a Sikah alternative (sourced from MaqamWorld, not
+fitted to the data) raised Sikah from 28% to 43% (development) and 23% to
+50% (held-out) of analyses, and the totals to 55% and 52%.
+
 ## Note-tracking artefacts on real recordings (unreleased)
 
 `crates/naghma-audio/examples/tracker_artifacts.rs` counts patterns that are
@@ -218,12 +259,10 @@ confusions, as before; ten seconds simply holds fewer notes to separate them.
 * Labels are whatever the uploader wrote. Taqasim modulate; a 60-second
   segment of a "Rast" taqsim can legitimately sit in another maqam for a while,
   so 100% is not the ceiling for `step1`.
-* **Sikah remains poor (15–44%).** Two measured causes, both about data rather
-  than scoring: performers place the sikah tonic much higher than the 24-EDO
-  half-flat (≈ −14 c from Mi in the Sikah demo), and several held-out Sikah
-  performances use Hijaz on the 3rd degree, which the dataset's single Sikah
-  illustration (Upper Rast on the 3rd) does not include. Neither was changed:
-  intonation values and maqam variants need the musician's review.
+* **Sikah is the weakest maqam** (43% / 50% of analyses with the Huzam
+  route, 28% / 23% without, at 10 s). The single Sikah scale demo places its
+  tonic about 14 c below Mi rather than 50, but across all Sikah recordings
+  the tonic's placement is inconsistent (see Performed intonation).
 * Most remaining errors are tonic choices between maqamat that share a pitch
   set (Rast/Bayati/Sikah, Kurd/Nahawand/Hijaz on related tonics); these are
   often reported as `ambiguous` (35% of analyses).
