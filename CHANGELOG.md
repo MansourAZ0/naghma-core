@@ -6,6 +6,14 @@ All notable changes are documented here ([Keep a Changelog](https://keepachangel
 ## [Unreleased]
 
 ### Fixed
+- Note tracker: a pluck's first ~100 ms no longer becomes a separate note.
+  For `settleS` (0.12 s) after an attack the note is renamed in place and
+  reported as the new `TrackerUpdate::revised` (same id as `started`).
+- Note tracker: readings an octave, a twelfth or two octaves from a sounding
+  note are skipped while the level decays (`harmonicGuard`): a harmonic, not
+  a new note. On 83 minutes of recorded oud (new `tracker_artifacts`
+  example) split plucks fell from 9.1 to 0.8 per minute and octave flips
+  from 26.7 to 5.4 per minute. Maqam recognition did not get worse.
 - Validate EqualTemperament divisions during JSON deserialization.
 - Report non-finite audio windows without panicking; reset onset history and recover on valid input.
 

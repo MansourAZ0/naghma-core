@@ -146,6 +146,44 @@ far from the 24-EDO grid. The cumulative effect of the changes is far larger
 than any single row because they interact (soft membership alone was neutral
 before the tonic weighting changed).
 
+## Note-tracking artefacts on real recordings (unreleased)
+
+`crates/naghma-audio/examples/tracker_artifacts.rs` counts patterns that are
+errors whatever the music is, so it needs no note labels: a pluck's
+transient reported as its own note (**split**: a plucked note under 150 ms
+followed at once, with no new pluck, by one less than a semitone away), and
+a harmonic taken for the fundamental (**octave**: a jump of an octave, a
+twelfth or two octaves with no new pluck, which a fretted oud cannot make).
+It also reports how long the screen shows a name the note does not end up
+with, and the time from an attack to the note being shown.
+
+```text
+cargo run --release -p naghma-audio --example tracker_artifacts -- manifest.json \
+    [--tracker '{"settleS":0,"harmonicGuard":false}']
+```
+
+All 89 clips of both sets (83 minutes, including the two open-string
+tuning references):
+
+| Tracker | Notes/min | Splits/min | Octave flips/min | Wrong name shown | Attack → shown, median (p90) |
+| --- | --- | --- | --- | --- | --- |
+| 0.5.0 | 223 | 9.1 | 26.7 | — | 85 ms (171 ms) |
+| Harmonic guard only | 202 | 8.9 | 8.4 | — | 85 ms (171 ms) |
+| Guard + settle 0.08 s | 195 | 4.5 | 6.8 | 0.8% | 85 ms (171 ms) |
+| **Guard + settle 0.12 s** | 188 | **0.8** | **5.4** | 2.6% | 85 ms (171 ms) |
+| Guard + settle 0.16 s | 183 | 0.2 | 4.8 | 4.6% | 85 ms (171 ms) |
+
+"Wrong name shown" is the pluck's first reading on screen before the note
+is renamed; before this change the same reading was a separate short note
+(counted as a split). 0.12 s covers the measured ~85 ms transient plus the
+analysis window's lag. Maqam recognition with the new tracker (10 s window):
+development 54% → 54%, held-out 46% → 49% of analyses.
+
+Limits: an octave error that lasts a whole note from its attack (the
+detector reading the second harmonic of a pluck throughout) is not caught;
+the remaining "octave flips" include real octave leaps whose pluck the
+attack detector missed. Latency is algorithmic only (no device buffering).
+
 ## Ten-second window (unreleased)
 
 The maqam window was shortened from 30 s to 10 s at a player's request: in a

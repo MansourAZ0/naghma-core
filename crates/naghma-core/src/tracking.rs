@@ -16,6 +16,16 @@
 //!   on the same pitch (tremolo produces one event per pluck). Observations
 //!   whose analysis window mostly precedes the attack are ignored, since
 //!   they mix the old and new notes.
+//! * **Attack settling** — the first moments of a pluck often read a
+//!   quarter-tone flat or an octave high. For `settle_s` after an attack the
+//!   note is renamed in place (reported as [`TrackerUpdate::revised`])
+//!   instead of ending it and starting another.
+//! * **Harmonic guard** — while a note sounds without a new attack, readings
+//!   an octave, a twelfth or two octaves away are a harmonic taken for the
+//!   fundamental (a fretted note cannot jump that far without a pluck) and
+//!   are skipped, unless the level rises back to the note's peak, as a pluck
+//!   the attack detector missed would. (During settling such a reading
+//!   renames the note instead: the attack itself may have been the error.)
 //! * **Dropout bridging** — short runs of invalid observations do not end a
 //!   note; `release_frames` consecutive ones do.
 //! * **Smoothing** — the displayed pitch is the median of the last few
@@ -53,6 +63,30 @@ pub struct TrackerConfig {
     /// Observations whose analysis window lies more than this fraction
     /// before an onset are ignored as mixed.
     pub onset_mix_fraction: f64,
+    /// Seconds after an attack during which the note may be renamed in
+    /// place; 0 disables.
+    #[serde(default = "default_settle")]
+    pub settle_s: f64,
+    /// Skip readings a harmonic away from the sounding note (see the
+    /// module documentation).
+    #[serde(default = "default_true")]
+    pub harmonic_guard: bool,
+}
+
+fn default_settle() -> f64 {
+    0.12
+}
+
+fn default_true() -> bool {
+    true
+}
+
+/// `true` if `cents` is within 60 cents of an octave, a twelfth or two
+/// octaves (up or down).
+fn harmonic_jump(cents: f64) -> bool {
+    [1200.0, 1902.0, 2400.0]
+        .iter()
+        .any(|h| (cents.abs() - h).abs() < 60.0)
 }
 
 impl Default for TrackerConfig {
@@ -66,6 +100,8 @@ impl Default for TrackerConfig {
             median_frames: 5,
             smoothing: 0.4,
             onset_mix_fraction: 0.5,
+            settle_s: default_settle(),
+            harmonic_guard: true,
         }
     }
 }
@@ -112,6 +148,10 @@ pub struct TrackerUpdate {
     pub ended: Option<MusicalNoteEvent>,
     /// A note that started with this update.
     pub started: Option<MusicalNoteEvent>,
+    /// A note that started shortly before, renamed while its attack
+    /// settled (same id; replaces what `started` reported).
+    #[serde(default)]
+    pub revised: Option<MusicalNoteEvent>,
     /// An attack was reported with this update.
     pub onset: bool,
 }
@@ -127,6 +167,8 @@ struct Active {
     change_candidate: Option<(NoteMatch, u32)>,
     last_confidence: f64,
     last_valid_s: f64,
+    /// Attack time while the note may still be renamed in place.
+    settling_until: Option<f64>,
 }
 
 #[derive(Debug, Clone)]
@@ -218,6 +260,7 @@ impl NoteTracker {
             state: LiveState::Silent,
             ended: None,
             started: None,
+            revised: None,
             onset: onset.is_some(),
         };
 
@@ -280,11 +323,50 @@ impl NoteTracker {
     }
 
     fn on_valid(&mut self, obs: &PitchObservation, raw: Pitch, out: &mut TrackerUpdate) {
+        if let Some(active) = &mut self.active {
+            let settling = active.settling_until.is_some_and(|t| obs.time_s <= t);
+            let rising = obs.level_db >= active.event.peak_level_db - 1.0;
+            if self.config.harmonic_guard
+                && !settling
+                && !rising
+                && harmonic_jump(active.smoothed.cents_to(raw))
+            {
+                // A harmonic, not a new note: hold the note as it is.
+                active.invalid_run = 0;
+                return;
+            }
+        }
         let filtered = self.median_pitch(raw);
         let candidate = self.player_match(filtered);
 
         if let Some(active) = &mut self.active {
             active.invalid_run = 0;
+            if active.settling_until.is_some_and(|t| obs.time_s > t) {
+                active.settling_until = None;
+            }
+            if active.settling_until.is_some() && candidate.note != active.held.note {
+                // Still inside the attack: rename the note in place.
+                active.held = candidate;
+                active.smoothed = filtered;
+                active.pitches.clear();
+                active.pitches.push(filtered.0);
+                active.change_candidate = None;
+                active.last_confidence = obs.confidence;
+                active.last_valid_s = obs.time_s;
+                active.event.observations += 1;
+                let reading = self.reading_for(filtered);
+                let Some(active) = &mut self.active else {
+                    return;
+                };
+                let event = &mut active.event;
+                event.frequency_hz = reading.frequency_hz;
+                event.sounding_pitch = reading.sounding_pitch;
+                event.player_pitch = reading.player_pitch;
+                event.player = candidate;
+                event.sounding = reading.sounding;
+                out.revised = Some(event.clone());
+                return;
+            }
             if candidate.note == active.held.note {
                 active.change_candidate = None;
             } else {
@@ -404,6 +486,8 @@ impl NoteTracker {
         let id = self.next_id;
         self.next_id += 1;
         self.pending = None;
+        let settling_until = (start_kind == NoteStart::Attack && self.config.settle_s > 0.0)
+            .then(|| self.last_onset_s.unwrap_or(start_s) + self.config.settle_s);
         let reading = self.reading_for(sounding);
         let event = MusicalNoteEvent {
             id,
@@ -430,6 +514,7 @@ impl NoteTracker {
             change_candidate: None,
             last_confidence: obs.confidence,
             last_valid_s: obs.time_s,
+            settling_until,
         });
         event
     }
@@ -772,5 +857,93 @@ mod tests {
         };
         assert_eq!(n.reading.player.note, note("Mi4"));
         assert!((n.reading.player.deviation_cents - 22.0).abs() < 0.5);
+    }
+
+    /// One pluck at frame `from`; `reading(k)` gives (pitch, level dB) `k`
+    /// frames after the attack. Returns every update.
+    fn pluck(
+        t: &mut NoteTracker,
+        from: usize,
+        frames: usize,
+        reading: impl Fn(usize) -> (f64, f64),
+    ) -> Vec<TrackerUpdate> {
+        (0..frames)
+            .map(|k| {
+                let (pitch, level_db) = reading(k);
+                let obs = PitchObservation {
+                    level_db,
+                    ..voiced(from + k, pitch)
+                };
+                t.update(&obs, (k == 0).then_some(from as f64 * HOP))
+            })
+            .collect()
+    }
+
+    fn with(config: TrackerConfig) -> NoteTracker {
+        NoteTracker::new(config, PitchContext::default())
+    }
+
+    #[test]
+    fn a_flat_attack_renames_the_note_instead_of_splitting_it() {
+        // 40 cents flat for the first 64 ms of the pluck, then Sol4.
+        let flat = |k: usize| (if k < 6 { 66.6 } else { 67.0 }, -20.0);
+        let mut t = tracker();
+        let updates = pluck(&mut t, 0, 40, flat);
+        let started: Vec<_> = updates.iter().filter_map(|u| u.started.clone()).collect();
+        let revised: Vec<_> = updates.iter().filter_map(|u| u.revised.clone()).collect();
+        assert_eq!(started.len(), 1);
+        assert_eq!(started[0].player.note, note("Sol half-flat 4"));
+        assert_eq!(revised.len(), 1);
+        assert_eq!(revised[0].id, started[0].id);
+        assert_eq!(revised[0].player.note, note("Sol4"));
+        assert_eq!(shown(updates.last().unwrap()), Some(note("Sol4")));
+        let event = t.flush(40.0 * HOP).unwrap();
+        assert_eq!(event.player.note, note("Sol4"));
+        assert_eq!(event.start_s, 0.0);
+        assert!(updates.iter().all(|u| u.ended.is_none()));
+
+        // Without settling the transient becomes a note of its own.
+        let mut t = with(TrackerConfig {
+            settle_s: 0.0,
+            ..TrackerConfig::default()
+        });
+        let updates = pluck(&mut t, 0, 40, flat);
+        assert_eq!(updates.iter().filter(|u| u.started.is_some()).count(), 2);
+    }
+
+    #[test]
+    fn a_harmonic_reading_mid_note_is_skipped() {
+        // Sol3 decaying; for 70 ms the detector reads its octave.
+        let reading = |k: usize| {
+            let level = -20.0 - k as f64 * 0.2;
+            (if (40..47).contains(&k) { 67.0 } else { 55.0 }, level)
+        };
+        let mut t = tracker();
+        let updates = pluck(&mut t, 0, 80, reading);
+        assert_eq!(updates.iter().filter(|u| u.started.is_some()).count(), 1);
+        assert!(updates[2..].iter().all(|u| shown(u) == Some(note("Sol3"))));
+
+        let mut t = with(TrackerConfig {
+            harmonic_guard: false,
+            ..TrackerConfig::default()
+        });
+        let updates = pluck(&mut t, 0, 80, reading);
+        assert_eq!(updates.iter().filter(|u| u.started.is_some()).count(), 3);
+    }
+
+    #[test]
+    fn an_octave_at_full_level_is_a_new_note() {
+        // A pluck the attack detector missed brings the level back up.
+        let reading = |k: usize| {
+            if k < 40 {
+                (55.0, -20.0 - k as f64 * 0.2)
+            } else {
+                (67.0, -19.0)
+            }
+        };
+        let mut t = tracker();
+        let updates = pluck(&mut t, 0, 60, reading);
+        assert_eq!(updates.iter().filter(|u| u.started.is_some()).count(), 2);
+        assert_eq!(shown(updates.last().unwrap()), Some(note("Sol4")));
     }
 }
