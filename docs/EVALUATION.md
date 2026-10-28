@@ -146,7 +146,7 @@ far from the 24-EDO grid. The cumulative effect of the changes is far larger
 than any single row because they interact (soft membership alone was neutral
 before the tonic weighting changed).
 
-## Performed intonation (unreleased)
+## Performed intonation (0.6.0)
 
 `crates/naghma-audio/examples/measure_intonation.rs` measures where players
 put each degree. Per clip it removes the tuning offset, picks the tonic under
@@ -187,7 +187,7 @@ Adding that route as a Sikah alternative (sourced from MaqamWorld, not
 fitted to the data) raised Sikah from 28% to 43% (development) and 23% to
 50% (held-out) of analyses, and the totals to 55% and 52%.
 
-## Note-tracking artefacts on real recordings (unreleased)
+## Note-tracking artefacts on real recordings (0.6.0)
 
 `crates/naghma-audio/examples/tracker_artifacts.rs` counts patterns that are
 errors whatever the music is, so it needs no note labels: a pluck's
@@ -237,7 +237,7 @@ detector reading the second harmonic of a pluck throughout) is not caught;
 the remaining "octave flips" include real octave leaps whose pluck the
 attack detector missed. Latency is algorithmic only (no device buffering).
 
-## Ten-second window (unreleased)
+## Ten-second window (0.6.0)
 
 The maqam window was shortened from 30 s to 10 s at a player's request: in a
 taqsim, 30 s mixes passages in different maqamat that share most notes. Two

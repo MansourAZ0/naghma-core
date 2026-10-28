@@ -5,6 +5,13 @@ All notable changes are documented here ([Keep a Changelog](https://keepachangel
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-28
+
+Maqam ranking now follows the music over 10 s instead of 30 s. Note tracking
+was measured on 83 minutes of recorded oud: split plucks 9.1 -> 0.8 per
+minute, octave flips 26.7 -> 5.4 per minute, attack-to-display median 85 ->
+64 ms. Requires pitchforge v0.1.1.
+
 ### Fixed
 - `EngineSession`: a `stop` while a slow `start` was opening the device left
   the engine running afterwards (reproduced), and overlapping starts could

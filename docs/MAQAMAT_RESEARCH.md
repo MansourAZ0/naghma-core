@@ -93,7 +93,7 @@ Single recordings depart from these conversions (the Sikah scale demo puts
 its tonic about 14 cents below Mi natural rather than 50). Measured over all
 85 recordings, though, most degrees sit within about 10 cents of the 24-EDO
 values on average, with a wide spread between players
-([EVALUATION.md](EVALUATION.md#performed-intonation-unreleased)). The
+([EVALUATION.md](EVALUATION.md#performed-intonation-060)). The
 analyser absorbs the spread algorithmically — soft membership with an
 adjustable tolerance and global tuning-offset compensation — without
 changing the dataset's values.
