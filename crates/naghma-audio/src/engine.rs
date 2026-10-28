@@ -145,6 +145,10 @@ pub enum EngineError {
     /// macOS this usually means a microphone-permission prompt is waiting
     /// for the user.
     StartTimeout,
+    /// A later start or stop of the same
+    /// [`EngineSession`](crate::session::EngineSession) replaced this start
+    /// while it was opening the device. Not a failure to show the user.
+    Superseded,
     /// Other backend error.
     Backend(String),
 }
@@ -168,6 +172,7 @@ impl fmt::Display for EngineError {
                 f,
                 "the audio device did not start in time; a microphone permission prompt may be waiting"
             ),
+            Self::Superseded => write!(f, "this start was replaced by a later start or stop"),
             Self::Backend(e) => write!(f, "audio backend error: {e}"),
         }
     }

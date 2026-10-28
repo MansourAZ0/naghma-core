@@ -6,6 +6,13 @@ All notable changes are documented here ([Keep a Changelog](https://keepachangel
 ## [Unreleased]
 
 ### Fixed
+- `EngineSession`: a `stop` while a slow `start` was opening the device left
+  the engine running afterwards (reproduced), and overlapping starts could
+  leave two engines. Every start and stop now takes a generation number;
+  the last call wins and a replaced start returns the new
+  `EngineError::Superseded` (serialized `superseded`). A `reconfigure` during
+  a start returns the new `Reconfigured::Pending` and is applied when the
+  device opens.
 - Note tracker: a pluck's first ~100 ms no longer becomes a separate note.
   For `settleS` (0.12 s) after an attack the note is renamed in place and
   reported as the new `TrackerUpdate::revised` (same id as `started`).

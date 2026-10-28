@@ -38,11 +38,10 @@ Release notes record this change. Apps still consume older tagged libraries.
 ## Remaining work
 
 - Release new pitchforge and naghma tags and update consumers in dependency order.
-- `EngineSession` releases its state lock during source startup. Concurrent
-  start/stop/reconfigure operations need explicit lifecycle serialization or
-  cancellation/generation tests. Ajnas adds an outer runtime lock; direct library
-  users and Watar need care. This is a code-review concern, not a reproduced race
-  in this pass.
+- ~~`EngineSession` lifecycle races~~ — fixed after this audit: a stop
+  during a slow start left the engine running (reproduced in a test).
+  Starts and stops are now ordered by a generation number (last call wins)
+  and covered by concurrency tests.
 - Broaden validation for directly constructed/deserialized public configurations,
   oversized simulation requests, extreme sample rates and tuning ranges.
 - Document dropped-audio discontinuity policy: counters record drops, but the
