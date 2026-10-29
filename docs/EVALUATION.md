@@ -266,6 +266,69 @@ time-stamped labels from a musician. Maqamat that share a pitch set on a
 related tonic (Sikah/Bayati/Rast, Hijaz/Nahawand/Kurd) are the main
 confusions, as before; ten seconds simply holds fewer notes to separate them.
 
+## Jins reading and score memory (0.7.0)
+
+A taqsim dwells in a maqam's upper jins for long stretches. With a 10 s
+window and no history, a passage in Hijaz's upper Nahawand on Sol was ranked
+maqam Nahawand on Sol: Hijaz on Re (Hijaz on Re + Nahawand on Sol) and
+Nahawand on Sol (Nahawand on Sol + Hijaz on Re) have exactly the same notes.
+0.7.0 adds:
+
+* **Score memory.** Every maqam and tonic keeps a decaying score history,
+  blended half-and-half with the window's score. History falls slowly
+  (60 s) while the notes stay in the maqam's scale, faster in proportion to
+  notes outside it, and is dropped once a jins outside the maqam is
+  confirmed. Rising evidence is followed within 10 s, but only while the
+  leading maqam is contradicted (≥ 10% foreign notes, then for 20 s), so the
+  same-notes rotation cannot creep in during an upper-jins passage.
+* **Cadence** (0.2): share of phrase endings (long tones, tones before a
+  pause, tremolo merged into one tone) on the tonic. **Register** (0.3):
+  melody from a little below the tonic to a little above its octave.
+  **Lower jins** (0.2): completeness of the jins on the tonic.
+* **Active jins** for the latest 5 s, as a placement of the leading maqam
+  (first jins or an upper one), and a **foreign jins** (possible modulation)
+  when ≥ 10% of that passage lies outside the maqam's scale, a jins explains
+  ≥ 70% of those notes, it is not one of the maqam's documented routes, and
+  it is heard in two analyses in a row.
+
+| Set | Measure | 0.6.0 | 0.7.0 |
+| --- | --- | --- | --- |
+| Development (54) | step1 / step3 | 55% / 83% | **70% / 91%** |
+| Development (54) | top1 / top3 | 56% / 85% | **70% / 89%** |
+| Held-out (31) | step1 / step3 | 52% / 81% | **73% / 91%** |
+| Held-out (31) | top1 / top3 | 32% / 71% | **55% / 77%** |
+| Both | ambiguous share | ~35% | ~12% |
+| Both | analyses flagging a possible modulation | — | 1–2% (scale demos 1%) |
+
+Per maqam, `step1` (development / held-out): Ajam 71→91% / 65→80%, Bayati
+45→60% / 55→76%, Hijaz 53→70% / 68→82%, Kurd 56→61% / 51→83%, Nahawand
+45→71% / 61→87%, Rast 58→86% / 37→71%, Saba 61→66% / 36→49%, Sikah
+44→52% / 49→57%. (The 0.6.0 column is the 0.6.0 release; the ten-second table above
+was measured before that release's note-tracking fixes.)
+
+Development ablations (`step1` / `top1`), each from the configuration at the
+time of the ablation (68% / 74%, before the modulation responsiveness below):
+no memory 55% / 61%; no cadence 70% / 81%; no register 68% / 74%; no lower
+jins 68% / 81%; memory only 68% / 78%. **Memory gives almost all of the
+gain on these recordings.** Cadence, register and lower jins are within
+noise on the corpus, but decide the rotation case it barely contains: on one
+Hijaz phrase through both ajnas and without history, the Hijaz-over-Nahawand
+margin is 0.06 (ambiguous) with neither, 0.14 with cadence, 0.10 with
+register and 0.18 with both. A grid of 64 weight combinations on the
+development set spanned 63–71% step1; the chosen weights are in its flat
+top, not its single best cell.
+
+**Responsiveness costs accuracy on whole-clip labels.** On synthetic Bayati
+on Re followed by Hijaz on Re, the possible modulation is flagged after 5 s
+and the leading maqam changes after 14 s (no memory: 6 s; memory without the
+contradiction rule: 25 s). Faster rise times (5 s → 9 s to switch) cost two
+points of development step1, slower ones (20 s → 20 s) gain one: the labels
+ignore modulation and reward a reading that never moves. The two remaining
+Hijaz → Nahawand end-of-clip confusions are passages resting on Sol, 20 s and
+more, with 70–87% of phrase endings on it: plausibly the common Hijaz
+modulation to Nahawand on its fourth, which only time-stamped labels can
+settle. A fixed tonic (qarar) setting removes the rotation entirely.
+
 ## Limits
 
 * Labels are whatever the uploader wrote. Taqasim modulate; a 60-second
@@ -276,8 +339,13 @@ confusions, as before; ten seconds simply holds fewer notes to separate them.
   tonic about 14 c below Mi rather than 50, but across all Sikah recordings
   the tonic's placement is inconsistent (see Performed intonation).
 * Most remaining errors are tonic choices between maqamat that share a pitch
-  set (Rast/Bayati/Sikah, Kurd/Nahawand/Hijaz on related tonics); these are
-  often reported as `ambiguous` (35% of analyses).
+  set (Rast/Bayati/Sikah, Kurd/Nahawand/Hijaz on related tonics); 0.7.0's
+  score memory reports far fewer of them as `ambiguous` (about 12% of
+  analyses, from 35%), so a wrong early reading can now persist until the
+  notes contradict it.
+* The active jins is read from pitch classes over 5 s. It names the
+  placement that fits best; it does not yet use register to tell a jins
+  played below the tonic from the same jins an octave higher.
 * Small corpus (85 clips, 6 with stated tonics), one segment per recording, and
   the development set was used for parameter choices; the held-out numbers are
   the fairer estimate.

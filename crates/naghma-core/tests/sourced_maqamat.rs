@@ -1,6 +1,6 @@
 //! Regression expectations independently checked against the cited notation.
 use naghma_core::maqam::analysis::{AnalyzerConfig, Evidence, HistoryNote, MaqamAnalyzer};
-use naghma_core::maqam::{MaqamDataset, SCHEMA_VERSION};
+use naghma_core::maqam::{JinsRole, MaqamDataset, SCHEMA_VERSION};
 use naghma_core::notation::SpelledNote;
 use naghma_core::pitch::Pitch;
 use naghma_core::tuning::{NoteSpelling, ProvenanceStatus, SpellingTable};
@@ -343,5 +343,232 @@ fn sikah_has_a_separate_huzam_route_with_hijaz_on_the_third() {
     assert_eq!(
         names("sikah", "Mi half-flat 4", None)[3..5],
         ["La4", "Si half-flat 4"]
+    );
+}
+
+/// A small taqsim sketch: (pitch, seconds) passages played back to back and
+/// analysed every second, as a live application does. Returns the analysis
+/// after each passage.
+fn perform(passages: &[&[(f64, f64)]]) -> Vec<naghma_core::maqam::analysis::MaqamAnalysis> {
+    let ds = MaqamDataset::teaching_eight_24edo();
+    let mut a = MaqamAnalyzer::new(AnalyzerConfig::default());
+    let (mut t, mut next_analysis) = (0.0, 1.0);
+    let mut out = Vec::new();
+    for passage in passages {
+        let mut last = None;
+        for &(pitch, duration) in *passage {
+            a.push(HistoryNote {
+                start_s: t,
+                duration_s: duration,
+                pitch,
+            });
+            t += duration;
+            while next_analysis <= t {
+                last = Some(a.analyze(Some(&ds), None, next_analysis));
+                next_analysis += 1.0;
+            }
+        }
+        out.push(last.expect("a passage longer than a second"));
+    }
+    out
+}
+
+/// Nahawand on Sol4, rising to Re5 and coming to rest on Sol (the ghammaz
+/// of Hijaz and Bayati on Re).
+const UPPER_NAHAWAND_ON_SOL: [(f64, f64); 9] = [
+    (67.0, 0.4),
+    (69.0, 0.4),
+    (70.0, 0.4),
+    (72.0, 0.6),
+    (74.0, 0.8),
+    (72.0, 0.4),
+    (70.0, 0.4),
+    (69.0, 0.4),
+    (67.0, 1.2),
+];
+
+fn upper_passage_keeps_the_maqam(id: &str, lower: &[(f64, f64)], lower_jins: &str) {
+    let opening: Vec<(f64, f64)> = lower.iter().chain(lower).copied().collect();
+    let upper: Vec<(f64, f64)> = UPPER_NAHAWAND_ON_SOL
+        .iter()
+        .cycle()
+        .take(3 * UPPER_NAHAWAND_ON_SOL.len())
+        .copied()
+        .collect();
+    let readings = perform(&[&opening, &upper, lower]);
+    let re = NoteSpelling::new(note("Re4").degree, note("Re4").accidental);
+    let sol = NoteSpelling::new(note("Sol4").degree, note("Sol4").accidental);
+    for (i, r) in readings.iter().enumerate() {
+        assert_eq!(r.candidates[0].maqam, id, "passage {i}: {r:#?}");
+        assert_eq!(r.candidates[0].tonic, re, "passage {i}: {r:#?}");
+        assert!(!r.possible_modulation, "passage {i}: {r:#?}");
+    }
+    // Fifteen seconds in the upper jins: its second jins, not Nahawand.
+    let upper = readings[1].active_jins.as_ref().expect("an active jins");
+    assert_eq!(upper.jins, "nahawand");
+    assert_eq!(upper.role, JinsRole::Upper);
+    assert_eq!((upper.on_step, upper.root), (3, sol));
+    // Back down to the qarar: the first jins again.
+    let back = readings[2].active_jins.as_ref().expect("an active jins");
+    assert_eq!(
+        (back.jins.as_str(), &back.role),
+        (lower_jins, &JinsRole::Lower)
+    );
+    assert_eq!(back.root, re);
+}
+
+#[test]
+fn hijaz_upper_nahawand_is_its_second_jins_not_maqam_nahawand() {
+    // Hijaz on Re4: Re Mi-flat Fa-sharp Sol, resting on Re.
+    let lower = [
+        (62.0, 0.4),
+        (63.0, 0.4),
+        (66.0, 0.5),
+        (67.0, 0.8),
+        (66.0, 0.4),
+        (63.0, 0.4),
+        (62.0, 1.5),
+    ];
+    upper_passage_keeps_the_maqam("hijaz", &lower, "hijaz");
+}
+
+#[test]
+fn bayati_upper_nahawand_is_its_second_jins_not_maqam_nahawand() {
+    // Bayati on Re4: Re Mi-half-flat Fa Sol, resting on Re.
+    let lower = [
+        (62.0, 0.4),
+        (63.5, 0.4),
+        (65.0, 0.5),
+        (67.0, 0.8),
+        (65.0, 0.4),
+        (63.5, 0.4),
+        (62.0, 1.5),
+    ];
+    upper_passage_keeps_the_maqam("bayati", &lower, "bayati");
+}
+
+#[test]
+fn leaving_bayati_for_saba_is_a_possible_modulation() {
+    // Bayati on Re4, then Saba on Re: Re Mi-half-flat Fa Sol-flat.
+    let bayati = [
+        (62.0, 0.4),
+        (63.5, 0.4),
+        (65.0, 0.5),
+        (67.0, 0.8),
+        (65.0, 0.4),
+        (63.5, 0.4),
+        (62.0, 1.5),
+    ];
+    let saba = [
+        (62.0, 0.4),
+        (63.5, 0.4),
+        (65.0, 0.4),
+        (66.0, 0.8),
+        (65.0, 0.4),
+        (63.5, 0.4),
+        (62.0, 1.0),
+    ];
+    let opening: Vec<(f64, f64)> = bayati.iter().chain(&bayati).copied().collect();
+    let readings = perform(&[&opening, &saba]);
+    assert_eq!(readings[0].candidates[0].maqam, "bayati");
+    let r = &readings[1];
+    let moved = r.candidates[0].maqam == "saba";
+    let flagged = r
+        .foreign_jins
+        .as_ref()
+        .is_some_and(|j| j.jins == "saba" && r.possible_modulation);
+    assert!(moved || flagged, "{r:#?}");
+}
+
+#[test]
+fn one_hijaz_phrase_through_both_ajnas_is_not_nahawand_on_its_fourth() {
+    // Without any history: Hijaz on Re4 up through its upper Nahawand to Re5
+    // and back to rest on Re4. Nahawand on Sol has exactly the same notes;
+    // only where the phrase rests (cadence) and which jins lies at the
+    // bottom (register) tell them apart.
+    let phrase = [
+        (62.0, 0.4),
+        (63.0, 0.4),
+        (66.0, 0.4),
+        (67.0, 0.6),
+        (69.0, 0.4),
+        (70.0, 0.4),
+        (72.0, 0.4),
+        (74.0, 0.6),
+        (72.0, 0.4),
+        (70.0, 0.4),
+        (69.0, 0.4),
+        (67.0, 0.8),
+        (66.0, 0.4),
+        (63.0, 0.4),
+        (62.0, 1.2),
+    ];
+    let ds = MaqamDataset::teaching_eight_24edo();
+    let config = AnalyzerConfig::default();
+    let mut a = MaqamAnalyzer::new(config);
+    let mut t = 0.0;
+    for &(pitch, duration_s) in &phrase {
+        a.push(HistoryNote {
+            start_s: t,
+            duration_s,
+            pitch,
+        });
+        t += duration_s;
+    }
+    let r = a.analyze(Some(&ds), None, t + 0.5);
+    let score = |id: &str| r.candidates.iter().find(|c| c.maqam == id).unwrap().score;
+    assert_eq!(r.candidates[0].maqam, "hijaz", "{r:#?}");
+    assert!(
+        score("hijaz") - score("nahawand") > config.ambiguity_margin,
+        "{r:#?}"
+    );
+}
+
+#[test]
+fn a_real_modulation_still_takes_over() {
+    // Thirty seconds of Bayati on Re, then Hijaz on Re: the same tonic, but
+    // Mi-flat and Fa-sharp contradict Bayati. The history that holds a maqam
+    // through its upper jins must not hold it through a modulation.
+    let bayati = [
+        (62.0, 0.4),
+        (63.5, 0.4),
+        (65.0, 0.5),
+        (67.0, 0.8),
+        (69.0, 0.4),
+        (67.0, 0.4),
+        (65.0, 0.4),
+        (63.5, 0.4),
+        (62.0, 1.5),
+    ];
+    let hijaz = [
+        (62.0, 0.4),
+        (63.0, 0.4),
+        (66.0, 0.5),
+        (67.0, 0.8),
+        (69.0, 0.4),
+        (67.0, 0.4),
+        (66.0, 0.4),
+        (63.0, 0.4),
+        (62.0, 1.5),
+    ];
+    let opening: Vec<(f64, f64)> = bayati
+        .iter()
+        .cycle()
+        .take(6 * bayati.len())
+        .copied()
+        .collect();
+    // Four phrases, 20 s.
+    let after: Vec<(f64, f64)> = hijaz
+        .iter()
+        .cycle()
+        .take(4 * hijaz.len())
+        .copied()
+        .collect();
+    let readings = perform(&[&opening, &after]);
+    assert_eq!(readings[0].candidates[0].maqam, "bayati");
+    assert_eq!(
+        readings[1].candidates[0].maqam, "hijaz",
+        "{:#?}",
+        readings[1]
     );
 }

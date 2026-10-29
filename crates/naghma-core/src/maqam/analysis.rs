@@ -19,18 +19,44 @@
 //! * **resting tones** — time spent on the dataset's resting steps;
 //! * **ajnas** — completeness of the maqam's ajnas in what was heard;
 //! * **phrases** — occurrences of the dataset's characteristic phrases in the
-//!   melodic sequence.
+//!   melodic sequence;
+//! * **cadence** — phrase endings (qaflat: long tones, tones before a pause,
+//!   tremolo on one pitch) resting on the tonic;
+//! * **register** — the melody lying from a little below the tonic to a
+//!   little above its octave;
+//! * **lower jins** — completeness of the jins on the tonic, which defines
+//!   the maqam.
+//!
+//! Some maqamat are rotations of one another: Hijaz on Re (Hijaz on Re +
+//! Nahawand on Sol) and Nahawand on Sol (Nahawand on Sol + Hijaz on Re) have
+//! the same notes. Only cadence, register and what came before separate them.
+//!
+//! ## Two time scales
+//!
+//! A maqam lasts longer than [`AnalyzerConfig::window_s`]. Every score is
+//! blended with a decaying history of that maqam and tonic
+//! ([`ScoreWeights::memory`], [`AnalyzerConfig::memory_s`]); history fades
+//! slowly while the notes stay inside the maqam's scale and quickly once they
+//! leave it. A passage that dwells in an upper jins therefore keeps the qarar
+//! established before it.
+//!
+//! The latest few seconds ([`AnalyzerConfig::jins_window_s`]) are read as a
+//! jins: [`MaqamAnalysis::active_jins`] names the leading maqam's jins they
+//! dwell in (its first jins, jins al-asl, or an upper one), and
+//! [`MaqamAnalysis::foreign_jins`] a jins outside every documented route of
+//! the maqam, a possible modulation.
 //!
 //! Different maqamat can share most of their notes; when the best scores are
 //! close the result is [`AnalysisStatus::Ambiguous`] rather than a forced
 //! choice, and too little material gives
 //! [`AnalysisStatus::InsufficientData`].
 
-use super::{Maqam, MaqamDataset, ScaleDegree};
+use super::{Jins, JinsRole, Maqam, MaqamDataset, ScaleDegree};
 use crate::events::MusicalNoteEvent;
+use crate::notation::SpelledNote;
 use crate::tuning::NoteSpelling;
 use serde::{Deserialize, Serialize};
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 
 /// Which pitch identity the analysis uses.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
@@ -69,6 +95,27 @@ pub struct ScoreWeights {
     /// current reading instead of flickering; clear evidence still wins.
     #[serde(default)]
     pub continuity: f64,
+    /// Weight of phrase endings (qaflat) resting on the tonic. Phrases come
+    /// to rest on the qarar; a dominant (ghammaz) is only a temporary stop.
+    #[serde(default)]
+    pub cadence: f64,
+    /// Weight of the melody lying in the tonic's register: from a little
+    /// below the tonic to a little above its octave. This is what separates
+    /// rotations of one pitch set, such as Hijaz on Re and Nahawand on Sol:
+    /// the same notes, but a different jins at the bottom.
+    #[serde(default)]
+    pub register: f64,
+    /// Weight of the completeness of the lower jins (jins al-asl), which
+    /// defines the maqam, in addition to [`Self::ajnas`].
+    #[serde(default)]
+    pub lower_jins: f64,
+    /// Share of a candidate's score taken from its decaying score history
+    /// (`0` = only the current window, `1` = only the history). Material
+    /// that left the window still counts, fading over
+    /// [`AnalyzerConfig::memory_s`], so a passage in an upper jins does not
+    /// erase the qarar established before it.
+    #[serde(default)]
+    pub memory: f64,
 }
 
 impl Default for ScoreWeights {
@@ -83,6 +130,10 @@ impl Default for ScoreWeights {
             ajnas: 0.3,
             phrase: 0.15,
             continuity: 0.1,
+            cadence: 0.2,
+            register: 0.3,
+            lower_jins: 0.2,
+            memory: 0.5,
         }
     }
 }
@@ -134,11 +185,28 @@ pub struct AnalyzerConfig {
     pub pitch_space: PitchSpace,
     /// Evidence weights.
     pub weights: ScoreWeights,
+    /// Time constant of the score history, seconds (see
+    /// [`ScoreWeights::memory`]).
+    #[serde(default = "default_memory")]
+    pub memory_s: f64,
+    /// Time constant, seconds, with which the history follows a rising
+    /// score once notes contradict the leading maqam: shorter than
+    /// [`Self::memory_s`], so after a modulation the new maqam takes over
+    /// quickly while, otherwise, an established one fades slowly.
+    #[serde(default = "default_memory_rise")]
+    pub memory_rise_s: f64,
+    /// Length of the recent passage read for the active jins, seconds.
+    /// Ajnas are short, so this is much shorter than [`Self::window_s`].
+    #[serde(default = "default_jins_window")]
+    pub jins_window_s: f64,
 }
 
 impl Default for AnalyzerConfig {
     fn default() -> Self {
         Self {
+            memory_s: default_memory(),
+            memory_rise_s: default_memory_rise(),
+            jins_window_s: default_jins_window(),
             window_s: 10.0,
             tuning_window_s: default_tuning_window(),
             min_notes: 6,
@@ -158,6 +226,18 @@ impl Default for AnalyzerConfig {
 
 fn default_tuning_window() -> f64 {
     60.0
+}
+
+fn default_memory() -> f64 {
+    60.0
+}
+
+fn default_memory_rise() -> f64 {
+    10.0
+}
+
+fn default_jins_window() -> f64 {
+    5.0
 }
 
 /// One note in the analysis history.
@@ -233,6 +313,53 @@ pub enum Evidence {
         /// Index of the phrase in the maqam definition.
         index: usize,
     },
+    /// Phrase endings (qaflat) resting on the tonic.
+    Cadence {
+        /// Share of cadence strength on the tonic, in `[0, 1]`.
+        share: f64,
+        /// Phrase endings found in the window.
+        count: usize,
+    },
+    /// The melody lies in the tonic's register.
+    Register {
+        /// Share of played time, in `[0, 1]`.
+        share: f64,
+    },
+}
+
+/// A jins of the leading maqam that the most recent passage dwells in.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ActiveJins {
+    /// Jins id in the dataset.
+    pub jins: String,
+    /// Scale step of the maqam the jins is placed on.
+    pub on_step: u8,
+    /// Its role in the maqam: the lower jins (jins al-asl) or an upper one
+    /// (jins al-far', the second jins).
+    pub role: JinsRole,
+    /// Lowest note of the jins.
+    pub root: NoteSpelling,
+    /// Tonal centre of the jins (differs from `root` for ajnas such as
+    /// Upper Rast, whose tonic is their top note).
+    pub centre: NoteSpelling,
+    /// Share of the passage's played time on the jins's notes.
+    pub fit: f64,
+}
+
+/// A jins outside the leading maqam that explains the most recent passage
+/// better than the maqam does: a possible modulation.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DetectedJins {
+    /// Jins id in the dataset.
+    pub jins: String,
+    /// Lowest note of the jins.
+    pub root: NoteSpelling,
+    /// Tonal centre of the jins.
+    pub centre: NoteSpelling,
+    /// Share of the passage's played time on the jins's notes.
+    pub fit: f64,
 }
 
 /// A ranked maqam hypothesis.
@@ -269,13 +396,29 @@ pub struct MaqamAnalysis {
     pub status: AnalysisStatus,
     /// Ranked candidates (best first).
     pub candidates: Vec<MaqamCandidate>,
-    /// The best candidate of the earlier and later halves of the window
-    /// differ while both fit well: a modulation may have occurred.
+    /// The most recent passage leaves the leading maqam for a jins outside
+    /// it ([`Self::foreign_jins`]): a modulation may be under way. Moving
+    /// into the maqam's own upper jins is not a modulation.
     pub possible_modulation: bool,
     /// Tuning offset (cents) subtracted from the notes before scoring:
     /// estimated, or the configured fixed value.
     #[serde(default)]
     pub tuning_offset_cents: f64,
+    /// Which jins of the leading maqam the most recent passage
+    /// ([`AnalyzerConfig::jins_window_s`]) dwells in.
+    #[serde(default)]
+    pub active_jins: Option<ActiveJins>,
+    /// A jins outside the leading maqam that explains the most recent
+    /// passage better than the maqam does.
+    #[serde(default)]
+    pub foreign_jins: Option<DetectedJins>,
+}
+
+/// Decaying score of one maqam on one tonic pitch class.
+#[derive(Debug, Clone, Copy)]
+struct Remembered {
+    tonic: NoteSpelling,
+    score: f64,
 }
 
 /// Rolling note history plus scoring.
@@ -285,6 +428,18 @@ pub struct MaqamAnalyzer {
     history: VecDeque<HistoryNote>,
     /// Maqam id and tonic pitch class that led the previous analysis.
     leader: Option<(String, i64)>,
+    /// Score history per maqam and tonic pitch class.
+    memory: HashMap<(String, i64), Remembered>,
+    /// Time of the last analysis that updated [`Self::memory`].
+    remembered_at: Option<f64>,
+    /// Foreign jins (id, root pitch class) of the previous analysis.
+    pending_foreign: Option<(String, i64)>,
+    /// Leader (maqam id, tonic pitch class) whose notes have left it for a
+    /// confirmed foreign jins: its history no longer applies.
+    modulating: Option<(String, i64)>,
+    /// Until this time, rising evidence is followed quickly (see
+    /// [`AnalyzerConfig::memory_rise_s`]).
+    unsettled_until: f64,
 }
 
 impl MaqamAnalyzer {
@@ -294,6 +449,11 @@ impl MaqamAnalyzer {
             config,
             history: VecDeque::new(),
             leader: None,
+            memory: HashMap::new(),
+            remembered_at: None,
+            pending_foreign: None,
+            modulating: None,
+            unsettled_until: f64::NEG_INFINITY,
         }
     }
 
@@ -311,6 +471,11 @@ impl MaqamAnalyzer {
     pub fn clear(&mut self) {
         self.history.clear();
         self.leader = None;
+        self.memory.clear();
+        self.remembered_at = None;
+        self.pending_foreign = None;
+        self.modulating = None;
+        self.unsettled_until = f64::NEG_INFINITY;
     }
 
     /// Add a completed (or ongoing, with `now_s`) note event.
@@ -353,7 +518,7 @@ impl MaqamAnalyzer {
         now_s: f64,
     ) -> MaqamAnalysis {
         self.prune(now_s);
-        let config = &self.config;
+        let config = &{ self.config };
         let context: Vec<HistoryNote> = self
             .history
             .iter()
@@ -379,6 +544,8 @@ impl MaqamAnalyzer {
             candidates: Vec::new(),
             possible_modulation: false,
             tuning_offset_cents: offset,
+            active_jins: None,
+            foreign_jins: None,
         };
         let distinct = distinct_classes(&notes);
         if notes.len() < config.min_notes || distinct < config.min_distinct {
@@ -391,7 +558,26 @@ impl MaqamAnalyzer {
             return analysis;
         };
 
-        let mut candidates = rank(&notes, dataset, tonic, config);
+        let tonics = match tonic {
+            Some(t) => vec![t],
+            None => {
+                // The qarar of the current reading stays a candidate even
+                // while a passage in an upper jins never touches it.
+                let mut tonics = candidate_tonics(&notes);
+                let mut remembered: Vec<&Remembered> = self.memory.values().collect();
+                remembered.sort_by(|a, b| b.score.total_cmp(&a.score));
+                for r in remembered.into_iter().take(3) {
+                    let class = r.tonic.quarter_tone_class();
+                    if !tonics.iter().any(|t| t.quarter_tone_class() == class) {
+                        tonics.push(r.tonic);
+                    }
+                }
+                tonics
+            }
+        };
+        let mut candidates = rank_all(&notes, now_s, dataset, &tonics, config);
+        self.remember(&mut candidates, now_s);
+        dedup_by_maqam(&mut candidates);
         if let Some((maqam, class)) = &self.leader {
             if let Some(c) = candidates
                 .iter_mut()
@@ -416,22 +602,154 @@ impl MaqamAnalyzer {
             AnalysisStatus::Likely
         };
 
-        // Modulation check: compare the halves of the window.
-        if notes.len() >= 2 * config.min_notes {
-            let mid = notes.len() / 2;
-            let first = rank(&notes[..mid], dataset, tonic, config);
-            let second = rank(&notes[mid..], dataset, tonic, config);
-            if let (Some(a), Some(b)) = (first.first(), second.first()) {
-                analysis.possible_modulation = (a.maqam != b.maqam || a.tonic != b.tonic)
-                    && a.score >= config.min_score
-                    && b.score >= config.min_score;
+        // Which jins of the leader the latest passage dwells in, or which
+        // jins outside it.
+        if let Some(leader) = candidates.first() {
+            let recent_from = now_s - config.jins_window_s;
+            let recent: Vec<Prepared> = notes
+                .iter()
+                .filter(|n| n.start + n.duration >= recent_from)
+                .copied()
+                .collect();
+            let (active, mut foreign) = read_jins(&recent, dataset, leader, config);
+            // Only a jins heard in two analyses in a row: one misread note
+            // is not a modulation.
+            let key = foreign
+                .as_ref()
+                .map(|f| (f.jins.clone(), f.root.quarter_tone_class()));
+            if key.is_none() || key != self.pending_foreign {
+                foreign = None;
             }
+            self.pending_foreign = key;
+            analysis.possible_modulation = foreign.is_some();
+            self.modulating = foreign
+                .as_ref()
+                .map(|_| (leader.maqam.clone(), leader.tonic.quarter_tone_class()));
+            analysis.active_jins = active;
+            analysis.foreign_jins = foreign;
         }
 
         candidates.truncate(config.max_candidates);
         analysis.candidates = candidates;
         analysis
     }
+
+    /// Blend every candidate's score with the decaying history of its maqam
+    /// and tonic pitch class, then update that history.
+    fn remember(&mut self, candidates: &mut [MaqamCandidate], now_s: f64) {
+        let beta = self.config.weights.memory.clamp(0.0, 1.0);
+        let tau = self.config.memory_s;
+        if beta <= 0.0 || tau <= 0.0 || candidates.is_empty() {
+            self.memory.clear();
+            self.remembered_at = None;
+            return;
+        }
+        let key = |c: &MaqamCandidate| (c.maqam.clone(), c.tonic.quarter_tone_class());
+        // Each maqam and tonic counts with its best alternative / register,
+        // and with that candidate's share of notes outside its scale.
+        let mut raw: HashMap<(String, i64), (Remembered, f64)> = HashMap::new();
+        for c in candidates.iter() {
+            let e = raw.entry(key(c)).or_insert((
+                Remembered {
+                    tonic: c.tonic,
+                    score: f64::NEG_INFINITY,
+                },
+                1.0,
+            ));
+            if c.score > e.0.score {
+                e.0.score = c.score;
+                e.1 = foreign_share(c);
+            }
+        }
+        // Absent and new hypotheses count as the weakest one present.
+        let floor = raw
+            .values()
+            .map(|r| r.0.score)
+            .fold(f64::INFINITY, f64::min);
+        let dt = self.remembered_at.map(|t| (now_s - t).max(0.0));
+        // A hypothesis the current notes are consistent with keeps its
+        // history: resting on the ghammaz of an established maqam does not
+        // undo it. Notes outside its scale make the history fade faster.
+        // Once the notes contradict the leading maqam, rising evidence for
+        // others is followed faster (`memory_rise_s`): the music has moved
+        // and the new maqam takes over without a long wait. While the leader
+        // still explains every note (an upper jins on its ghammaz has the
+        // same notes as a maqam on that ghammaz), nothing is hurried.
+        // The reading stays unsettled for a while after a contradiction, as
+        // the lead may pass through hypotheses on the way to the new maqam.
+        const CONTRADICTED: f64 = 0.1;
+        let leader_contradicted = self
+            .leader
+            .as_ref()
+            .and_then(|k| raw.get(k))
+            .is_some_and(|r| r.1 >= CONTRADICTED);
+        if leader_contradicted {
+            self.unsettled_until = now_s + 2.0 * self.config.memory_rise_s;
+        }
+        let rise = if now_s <= self.unsettled_until {
+            self.config.memory_rise_s.max(1e-3)
+        } else {
+            tau
+        };
+        let alpha = |foreign: f64, rising: bool| {
+            dt.map_or(0.0, |dt| {
+                let tau = if rising {
+                    rise.min(tau)
+                } else {
+                    tau / (1.0 + 10.0 * foreign)
+                };
+                (-dt / tau).exp()
+            })
+        };
+        let mut next = HashMap::new();
+        for (k, old) in &self.memory {
+            let (now, mut a) = raw.get(k).map_or((floor, alpha(0.0, false)), |r| {
+                (r.0.score, alpha(r.1, r.0.score > old.score))
+            });
+            // A confirmed move to a jins outside the maqam: what established
+            // the maqam no longer holds it in place.
+            if self.modulating.as_ref() == Some(k) {
+                a = 0.0;
+            }
+            next.insert(
+                k.clone(),
+                Remembered {
+                    tonic: old.tonic,
+                    score: a * old.score + (1.0 - a) * now,
+                },
+            );
+        }
+        for (k, (r, foreign)) in raw {
+            let a = alpha(foreign, r.score > floor);
+            next.entry(k).or_insert(Remembered {
+                tonic: r.tonic,
+                score: a * floor + (1.0 - a) * r.score,
+            });
+        }
+        // Forget hypotheses that have faded into the background.
+        let mut kept: Vec<_> = next.into_iter().collect();
+        kept.sort_by(|a, b| b.1.score.total_cmp(&a.1.score));
+        kept.truncate(64);
+        self.memory = kept.into_iter().collect();
+        self.remembered_at = Some(now_s);
+        for c in candidates.iter_mut() {
+            if let Some(r) = self.memory.get(&key(c)) {
+                c.score = (1.0 - beta) * c.score + beta * r.score;
+            }
+        }
+        candidates.sort_by(|a, b| b.score.total_cmp(&a.score));
+    }
+}
+
+/// Share of a candidate's played time outside its scale.
+fn foreign_share(c: &MaqamCandidate) -> f64 {
+    c.contradicting
+        .iter()
+        .find_map(|e| match e {
+            Evidence::ForeignNotes { share, .. } => Some(*share),
+            _ => None,
+        })
+        .unwrap_or(0.0)
 }
 
 /// Estimate an instrument's global tuning offset, in cents, from played
@@ -499,26 +817,146 @@ struct Prepared {
     cents: f64,
     /// Evidence weight (duration, at least 50 ms).
     weight: f64,
+    /// Start, seconds.
+    start: f64,
     /// Duration, seconds.
     duration: f64,
 }
 
 fn prepare(notes: &[HistoryNote], offset: f64) -> Vec<Prepared> {
-    let mut prepared: Vec<(f64, Prepared)> = notes
+    let mut prepared: Vec<Prepared> = notes
         .iter()
-        .map(|n| {
-            (
-                n.start_s,
-                Prepared {
-                    cents: n.pitch * 100.0 - offset,
-                    weight: n.duration_s.max(0.05),
-                    duration: n.duration_s,
-                },
-            )
+        .map(|n| Prepared {
+            cents: n.pitch * 100.0 - offset,
+            weight: n.duration_s.max(0.05),
+            start: n.start_s,
+            duration: n.duration_s,
         })
         .collect();
-    prepared.sort_by(|a, b| a.0.total_cmp(&b.0));
-    prepared.into_iter().map(|(_, p)| p).collect()
+    prepared.sort_by(|a, b| a.start.total_cmp(&b.start));
+    prepared
+}
+
+/// A phrase ending: a tone the melody comes to rest on.
+#[derive(Debug, Clone, Copy)]
+struct Cadence {
+    /// Absolute pitch in cents.
+    cents: f64,
+    /// Relative strength: longer, approached from above, followed by a pause.
+    strength: f64,
+}
+
+/// Find phrase endings (qaflat) in time-ordered notes.
+///
+/// Repeated plucks of one pitch with no gap (a tremolo, rish) are one
+/// sustained tone. A tone ends a phrase when a pause follows it or when it
+/// lasts clearly longer than the passage's typical tone. Strength grows with
+/// its length, with a falling approach (phrases descend to the qarar) and
+/// with a following pause. `now_s` closes the last tone's pause.
+fn cadences(notes: &[Prepared], now_s: f64) -> Vec<Cadence> {
+    /// Tremolo repeats stay within this many cents.
+    const SAME_CENTS: f64 = 35.0;
+    /// ... and this gap, seconds.
+    const JOIN_GAP_S: f64 = 0.12;
+    /// A silence this long ends a phrase.
+    const PAUSE_S: f64 = 0.3;
+    struct Tone {
+        cents: f64,
+        weight: f64,
+        start: f64,
+        end: f64,
+    }
+    let mut tones: Vec<Tone> = Vec::new();
+    for n in notes {
+        let end = n.start + n.duration;
+        if let Some(t) = tones.last_mut() {
+            if (n.cents - t.cents).abs() <= SAME_CENTS && n.start - t.end <= JOIN_GAP_S {
+                t.cents = (t.cents * t.weight + n.cents * n.weight) / (t.weight + n.weight);
+                t.weight += n.weight;
+                t.end = t.end.max(end);
+                continue;
+            }
+        }
+        tones.push(Tone {
+            cents: n.cents,
+            weight: n.weight,
+            start: n.start,
+            end,
+        });
+    }
+    if tones.len() < 2 {
+        return Vec::new();
+    }
+    let mut lengths: Vec<f64> = tones.iter().map(|t| t.end - t.start).collect();
+    lengths.sort_by(f64::total_cmp);
+    let long = (1.75 * lengths[lengths.len() / 2]).max(0.5);
+    let mut out = Vec::new();
+    for (i, t) in tones.iter().enumerate() {
+        let length = t.end - t.start;
+        let pause = tones.get(i + 1).map_or(now_s, |n| n.start) - t.end;
+        let paused = pause >= PAUSE_S;
+        if !paused && length < long {
+            continue;
+        }
+        let falling = i > 0 && tones[i - 1].cents > t.cents + 50.0;
+        out.push(Cadence {
+            cents: t.cents,
+            strength: length.clamp(0.1, 2.5)
+                * if falling { 1.5 } else { 1.0 }
+                * if paused { 1.5 } else { 1.0 },
+        });
+    }
+    out
+}
+
+/// Credit for a tone `r` cents above the tonic lying in the tonic's
+/// register: full from a little below the tonic (a leading tone or a third
+/// below) to a little above its octave, fading to nothing at a fifth below
+/// and at a fifth above the octave.
+fn register_credit(r: f64) -> f64 {
+    const LOW_ZERO: f64 = -750.0;
+    const LOW_FULL: f64 = -250.0;
+    const HIGH_FULL: f64 = 1250.0;
+    const HIGH_ZERO: f64 = 1950.0;
+    if r <= LOW_ZERO || r >= HIGH_ZERO {
+        0.0
+    } else if r < LOW_FULL {
+        (r - LOW_ZERO) / (LOW_FULL - LOW_ZERO)
+    } else if r > HIGH_FULL {
+        (HIGH_ZERO - r) / (HIGH_ZERO - HIGH_FULL)
+    } else {
+        1.0
+    }
+}
+
+/// Share of played time in the register of a tonic at `tonic_cents`
+/// (absolute). For octave-repeating maqamat `tonic_cents` is a pitch class
+/// and the best octave is used: the one a listener would hear as the qarar.
+fn register_share(notes: &[Prepared], tonic_cents: f64, repeating: bool) -> f64 {
+    let total: f64 = notes.iter().map(|n| n.weight).sum();
+    if total <= 0.0 {
+        return 0.0;
+    }
+    let at = |tonic: f64| -> f64 {
+        notes
+            .iter()
+            .map(|n| n.weight * register_credit(n.cents - tonic))
+            .sum::<f64>()
+            / total
+    };
+    if !repeating {
+        return at(tonic_cents);
+    }
+    let low = notes.iter().map(|n| n.cents).fold(f64::INFINITY, f64::min);
+    let high = notes
+        .iter()
+        .map(|n| n.cents)
+        .fold(f64::NEG_INFINITY, f64::max);
+    let first = ((low - tonic_cents - 1950.0) / 1200.0).floor() as i64;
+    let last = ((high - tonic_cents + 750.0) / 1200.0).ceil() as i64;
+    (first..=last)
+        .map(|k| at(tonic_cents + 1200.0 * k as f64))
+        .fold(0.0, f64::max)
 }
 
 /// Number of distinct quarter-tone pitch classes.
@@ -548,24 +986,28 @@ fn candidate_tonics(notes: &[Prepared]) -> Vec<NoteSpelling> {
     classes.into_iter().map(|k| table.get(k)).collect()
 }
 
-fn rank(
+/// Score every maqam, tonic, alternative and (for nonperiodic maqamat)
+/// register; best first.
+fn rank_all(
     notes: &[Prepared],
+    now_s: f64,
     dataset: &MaqamDataset,
-    tonic: Option<NoteSpelling>,
+    tonics: &[NoteSpelling],
     config: &AnalyzerConfig,
 ) -> Vec<MaqamCandidate> {
-    let tonics = match tonic {
-        Some(t) => vec![t],
-        None => candidate_tonics(notes),
+    let cadences = cadences(notes, now_s);
+    let input = Input {
+        notes,
+        cadences: &cadences,
     };
     let mut out = Vec::new();
     for maqam in &dataset.maqamat {
-        for &t in &tonics {
+        for &t in tonics {
             for variant in
                 std::iter::once(None).chain(maqam.variants.iter().map(|v| Some(v.id.as_str())))
             {
                 if maqam.octave_repeating {
-                    out.extend(score(notes, dataset, maqam, t, variant, None, config));
+                    out.extend(score(input, dataset, maqam, t, variant, None, config));
                 } else {
                     let low = notes.iter().map(|n| n.cents).fold(f64::INFINITY, f64::min);
                     let high = notes
@@ -576,7 +1018,7 @@ fn rank(
                     let last = ((high / 1200.0).floor() as i32).min(125);
                     for octave in first..=last {
                         out.extend(score(
-                            notes,
+                            input,
                             dataset,
                             maqam,
                             t,
@@ -590,9 +1032,14 @@ fn rank(
         }
     }
     out.sort_by(|a, b| b.score.total_cmp(&a.score));
-    // Keep the best tonic per maqam so one maqam does not crowd the list.
+    out
+}
+
+/// Keep the best tonic per maqam (input sorted best first) so one maqam
+/// does not crowd the list.
+fn dedup_by_maqam(candidates: &mut Vec<MaqamCandidate>) {
     let mut seen = Vec::new();
-    out.retain(|c| {
+    candidates.retain(|c| {
         if seen.contains(&c.maqam) {
             false
         } else {
@@ -600,7 +1047,84 @@ fn rank(
             true
         }
     });
-    out
+}
+
+/// The material one analysis scores.
+#[derive(Clone, Copy)]
+struct Input<'a> {
+    notes: &'a [Prepared],
+    cadences: &'a [Cadence],
+}
+
+/// How played pitches are compared with one maqam on one tonic.
+#[derive(Debug, Clone, Copy)]
+struct Frame {
+    /// Tonic: pitch class (periodic) or absolute pitch (nonperiodic), cents.
+    tonic_cents: f64,
+    repeating: bool,
+    /// Documented span of a nonperiodic illustration, cents above the tonic.
+    span: (f64, f64),
+    /// Tolerance around the span before notes are folded into it.
+    margin: f64,
+}
+
+impl Frame {
+    fn new(
+        maqam: &Maqam,
+        tonic: NoteSpelling,
+        tonic_octave: Option<i8>,
+        span: (f64, f64),
+        config: &AnalyzerConfig,
+    ) -> Self {
+        let tonic_cents = tonic_octave.map_or_else(
+            || tonic.quarter_tone_class() as f64 * 50.0,
+            |octave| {
+                SpelledNote::new(tonic.degree, tonic.accidental, octave)
+                    .nominal_pitch()
+                    .0
+                    * 100.0
+            },
+        );
+        Self {
+            tonic_cents,
+            repeating: maqam.octave_repeating,
+            span,
+            margin: 1.5 * config.tolerance_cents,
+        }
+    }
+
+    /// Played pitch relative to the tonic: within the octave for periodic
+    /// maqamat; folded into the documented span by octaves otherwise.
+    fn rel(&self, cents: f64) -> f64 {
+        let r = cents - self.tonic_cents;
+        let (lo, hi) = (self.span.0 - self.margin, self.span.1 + self.margin);
+        if self.repeating {
+            r.rem_euclid(1200.0)
+        } else if r < lo {
+            r + 1200.0 * ((lo - r) / 1200.0).ceil()
+        } else if r > hi {
+            r - 1200.0 * ((r - hi) / 1200.0).ceil()
+        } else {
+            r
+        }
+    }
+
+    /// A target `cents` above the tonic in the same terms as [`Self::rel`].
+    fn target(&self, cents: f64) -> f64 {
+        if self.repeating {
+            cents.rem_euclid(1200.0)
+        } else {
+            cents
+        }
+    }
+
+    fn distance(&self, a: f64, b: f64) -> f64 {
+        if self.repeating {
+            circ(a, b)
+        } else {
+            (a - b).abs()
+        }
+    }
 }
 
 /// Circular distance in cents within an octave.
@@ -653,7 +1177,7 @@ fn targets(degrees: &[ScaleDegree], repeating: bool, tolerance: f64) -> Vec<Targ
 }
 
 fn score(
-    notes: &[Prepared],
+    input: Input<'_>,
     dataset: &MaqamDataset,
     maqam: &Maqam,
     tonic: NoteSpelling,
@@ -661,17 +1185,9 @@ fn score(
     tonic_octave: Option<i8>,
     config: &AnalyzerConfig,
 ) -> Option<MaqamCandidate> {
+    let notes = input.notes;
     let w = config.weights;
     let repeating = maqam.octave_repeating;
-    let tonic_cents = tonic_octave.map_or_else(
-        || tonic.quarter_tone_class() as f64 * 50.0,
-        |octave| {
-            crate::notation::SpelledNote::new(tonic.degree, tonic.accidental, octave)
-                .nominal_pitch()
-                .0
-                * 100.0
-        },
-    );
     let scale = maqam.scale(variant).expect("variant comes from this maqam");
     let placements = maqam
         .placements(variant)
@@ -695,7 +1211,9 @@ fn score(
         classes.first().map_or(0.0, |c| c.cents),
         classes.last().map_or(0.0, |c| c.cents),
     );
-    let margin = 1.5 * config.tolerance_cents;
+    let frame = Frame::new(maqam, tonic, tonic_octave, span, config);
+    let tonic_cents = frame.tonic_cents;
+    let margin = frame.margin;
     if !repeating {
         let total: f64 = notes.iter().map(|n| n.weight).sum();
         let inside: f64 = notes
@@ -710,19 +1228,8 @@ fn score(
             return None;
         }
     }
-    let rel = |n: &Prepared| -> f64 {
-        let r = n.cents - tonic_cents;
-        if repeating {
-            r.rem_euclid(1200.0)
-        } else if r < span.0 - margin {
-            r + 1200.0 * ((span.0 - margin - r) / 1200.0).ceil()
-        } else if r > span.1 + margin {
-            r - 1200.0 * ((r - span.1 - margin) / 1200.0).ceil()
-        } else {
-            r
-        }
-    };
-    let distance = |a: f64, b: f64| if repeating { circ(a, b) } else { (a - b).abs() };
+    let rel = |n: &Prepared| -> f64 { frame.rel(n.cents) };
+    let distance = |a: f64, b: f64| frame.distance(a, b);
     // Best matching target and its membership.
     let best_match = |r: f64, targets: &[Target]| -> Option<(usize, f64)> {
         targets
@@ -819,6 +1326,7 @@ fn score(
     // Ajnas completeness.
     let mut ajnas_score = 0.0;
     let mut ajnas_count = 0;
+    let mut lower_completeness: f64 = 0.0;
     for p in placements {
         let Some(jins) = dataset.jins(&p.jins) else {
             continue;
@@ -838,6 +1346,9 @@ fn score(
         let completeness = got as f64 / jins.degrees.len().max(1) as f64;
         ajnas_score += completeness;
         ajnas_count += 1;
+        if p.role == JinsRole::Lower {
+            lower_completeness = lower_completeness.max(completeness);
+        }
         supporting.push(Evidence::Jins {
             jins: jins.id.clone(),
             completeness,
@@ -888,6 +1399,27 @@ fn score(
         }
     }
 
+    // Phrase endings on the tonic.
+    let cadence_total: f64 = input.cadences.iter().map(|c| c.strength).sum();
+    let cadence_share = if cadence_total > 0.0 {
+        input
+            .cadences
+            .iter()
+            .map(|c| c.strength * on(frame.rel(c.cents), 0.0))
+            .sum::<f64>()
+            / cadence_total
+    } else {
+        0.0
+    };
+    if !input.cadences.is_empty() {
+        supporting.push(Evidence::Cadence {
+            share: cadence_share,
+            count: input.cadences.len(),
+        });
+    }
+    let register = register_share(notes, tonic_cents, repeating);
+    supporting.push(Evidence::Register { share: register });
+
     let mut contradicting = Vec::new();
     if foreign_share > 1e-9 {
         contradicting.push(Evidence::ForeignNotes {
@@ -902,7 +1434,10 @@ fn score(
         + if final_rest { w.final_rest } else { 0.0 }
         + w.resting * resting_share
         + w.ajnas * ajnas_avg
-        + w.phrase * phrases_found.min(3) as f64;
+        + w.lower_jins * lower_completeness
+        + w.phrase * phrases_found.min(3) as f64
+        + w.cadence * cadence_share
+        + w.register * register;
 
     Some(MaqamCandidate {
         maqam: maqam.id.clone(),
@@ -913,6 +1448,266 @@ fn score(
         supporting,
         contradicting,
     })
+}
+
+/// How well a passage matches one jins.
+#[derive(Debug, Clone, Copy)]
+struct JinsMatch {
+    /// Share of played time on the jins's notes.
+    fit: f64,
+    /// Ranking score: fit, plus coverage of the jins and emphasis on its
+    /// tonal centre.
+    score: f64,
+    /// The jins's root or centre was heard.
+    anchored: bool,
+    /// Share of the `outside` time (see [`jins_match`]) on the jins's notes.
+    outside_fit: f64,
+}
+
+/// Match `recent` with a jins whose notes are `targets` and tonal centre
+/// `centre`, all in the terms of `frame`. `outside` optionally gives, per
+/// note, the time it lies outside some other scale.
+fn jins_match(
+    recent: &[Prepared],
+    frame: &Frame,
+    targets: &[f64],
+    centre: f64,
+    tolerance: f64,
+    outside: &[f64],
+) -> JinsMatch {
+    let total: f64 = recent.iter().map(|n| n.weight).sum::<f64>().max(1e-9);
+    let mut heard = vec![0.0; targets.len()];
+    let (mut fit, mut centre_time, mut outside_fit) = (0.0, 0.0, 0.0);
+    for (i, n) in recent.iter().enumerate() {
+        let r = frame.rel(n.cents);
+        let mut best: f64 = 0.0;
+        for (h, &t) in heard.iter_mut().zip(targets) {
+            let m = membership(frame.distance(r, t), tolerance);
+            *h += n.weight * m;
+            best = best.max(m);
+        }
+        fit += n.weight * best;
+        centre_time += n.weight * membership(frame.distance(r, centre), tolerance);
+        outside_fit += outside.get(i).copied().unwrap_or(0.0) * best;
+    }
+    let outside_total: f64 = outside.iter().sum();
+    let heard_s = 0.12;
+    let coverage =
+        heard.iter().filter(|&&h| h >= heard_s).count() as f64 / targets.len().max(1) as f64;
+    let fit = fit / total;
+    JinsMatch {
+        fit,
+        score: fit + 0.4 * coverage + 0.2 * centre_time / total,
+        anchored: heard.first().is_some_and(|&h| h >= heard_s) || centre_time >= heard_s,
+        outside_fit: if outside_total > 0.0 {
+            outside_fit / outside_total
+        } else {
+            0.0
+        },
+    }
+}
+
+/// Spell the note `step` letters above `root` along `degrees`.
+fn spell_step(root: SpelledNote, degrees: &[ScaleDegree], step: u8) -> Option<SpelledNote> {
+    super::realize(root, degrees)
+        .into_iter()
+        .find(|r| r.step == step)
+        .map(|r| r.note)
+}
+
+fn spelling(note: SpelledNote) -> NoteSpelling {
+    NoteSpelling::new(note.degree, note.accidental)
+}
+
+/// Read the most recent passage as a jins: the placement of the leading
+/// maqam that explains it best, and, when the maqam's scale does not
+/// explain it, a jins outside the maqam that does.
+fn read_jins(
+    recent: &[Prepared],
+    dataset: &MaqamDataset,
+    leader: &MaqamCandidate,
+    config: &AnalyzerConfig,
+) -> (Option<ActiveJins>, Option<DetectedJins>) {
+    /// The maqam explains less than this share of the passage (one
+    /// characteristic note, such as Saba's diminished fourth, can be all
+    /// that leaves a maqam) ...
+    const OUTSIDE: f64 = 0.9;
+    /// ... and another jins explains at least this share of the notes
+    /// outside the maqam, and the passage as well as the maqam does: a
+    /// possible modulation.
+    const EXPLAINED: f64 = 0.7;
+    if recent.len() < 2 || distinct_classes(recent) < 2 {
+        return (None, None);
+    }
+    let Some(maqam) = dataset.maqam(&leader.maqam) else {
+        return (None, None);
+    };
+    let variant = leader.variant.as_deref();
+    let (Ok(scale), Ok(placements)) = (maqam.scale(variant), maqam.placements(variant)) else {
+        return (None, None);
+    };
+    let tol = config.tolerance_cents;
+    let mut degrees = scale.to_vec();
+    if variant.is_none() {
+        if let Some(desc) = &maqam.descending {
+            degrees.extend(desc.iter().copied());
+        }
+    }
+    let classes = targets(&degrees, maqam.octave_repeating, tol);
+    let span = (
+        classes.first().map_or(0.0, |c| c.cents),
+        classes.last().map_or(0.0, |c| c.cents),
+    );
+    let frame = Frame::new(maqam, leader.tonic, leader.tonic_octave, span, config);
+    let tonic_note = SpelledNote::new(
+        leader.tonic.degree,
+        leader.tonic.accidental,
+        leader.tonic_octave.unwrap_or(4),
+    );
+
+    let mut active: Option<(f64, ActiveJins)> = None;
+    for p in placements {
+        let Some(jins) = dataset.jins(&p.jins) else {
+            continue;
+        };
+        let Some(base) = scale.iter().find(|d| d.step == p.on_step) else {
+            continue;
+        };
+        let jins_targets: Vec<f64> = jins
+            .degrees
+            .iter()
+            .map(|d| frame.target(base.cents + d.cents))
+            .collect();
+        let centre = centre_cents(jins);
+        let m = jins_match(
+            recent,
+            &frame,
+            &jins_targets,
+            frame.target(base.cents + centre),
+            tol,
+            &[],
+        );
+        if active.as_ref().is_some_and(|(s, _)| *s >= m.score) {
+            continue;
+        }
+        let Some(root) = spell_step(tonic_note, scale, p.on_step) else {
+            continue;
+        };
+        let centre_note = spell_step(root, &jins.degrees, jins.tonic_step).unwrap_or(root);
+        active = Some((
+            m.score,
+            ActiveJins {
+                jins: jins.id.clone(),
+                on_step: p.on_step,
+                role: p.role.clone(),
+                root: spelling(root),
+                centre: spelling(centre_note),
+                fit: m.fit,
+            },
+        ));
+    }
+
+    // How much of the passage the maqam's scale explains at all, and the
+    // time of each note outside it.
+    let total: f64 = recent.iter().map(|n| n.weight).sum::<f64>().max(1e-9);
+    let inside: Vec<f64> = recent
+        .iter()
+        .map(|n| {
+            let r = frame.rel(n.cents);
+            classes
+                .iter()
+                .map(|t| membership(frame.distance(r, t.cents), tol))
+                .fold(0.0, f64::max)
+        })
+        .collect();
+    let maqam_fit = recent
+        .iter()
+        .zip(&inside)
+        .map(|(n, m)| n.weight * m)
+        .sum::<f64>()
+        / total;
+    let outside: Vec<f64> = recent
+        .iter()
+        .zip(&inside)
+        .map(|(n, m)| n.weight * (1.0 - m))
+        .collect();
+    let mut foreign = None;
+    if maqam_fit < OUTSIDE {
+        let mut roots: Vec<i64> = recent
+            .iter()
+            .map(|n| ((n.cents / 50.0).round() as i64).rem_euclid(24))
+            .collect();
+        roots.sort_unstable();
+        roots.dedup();
+        let table = crate::tuning::SpellingTable::default_24();
+        // Ajnas of every documented route of the maqam on this tonic: moving
+        // into one of them (Rast descending through Nahawand on Sol) is the
+        // maqam's own alternative, not a modulation.
+        let tonic_class = leader.tonic.quarter_tone_class() as f64 * 50.0;
+        let own: Vec<(&str, i64)> =
+            std::iter::once((maqam.ascending.as_slice(), maqam.ajnas.as_slice()))
+                .chain(
+                    maqam
+                        .variants
+                        .iter()
+                        .map(|v| (v.ascending.as_slice(), v.ajnas.as_slice())),
+                )
+                .flat_map(|(scale, placements)| {
+                    placements.iter().filter_map(move |p| {
+                        let base = scale.iter().find(|d| d.step == p.on_step)?;
+                        let class =
+                            (((tonic_class + base.cents) / 50.0).round() as i64).rem_euclid(24);
+                        Some((p.jins.as_str(), class))
+                    })
+                })
+                .collect();
+        let mut best: Option<(JinsMatch, &Jins, i64)> = None;
+        for jins in &dataset.ajnas {
+            let jins_targets: Vec<f64> = jins
+                .degrees
+                .iter()
+                .map(|d| d.cents.rem_euclid(1200.0))
+                .collect();
+            let centre = centre_cents(jins).rem_euclid(1200.0);
+            for &root in &roots {
+                let frame = Frame {
+                    tonic_cents: root as f64 * 50.0,
+                    repeating: true,
+                    span: (0.0, 0.0),
+                    margin: 0.0,
+                };
+                let m = jins_match(recent, &frame, &jins_targets, centre, tol, &outside);
+                let explains = m.outside_fit >= EXPLAINED && m.fit >= maqam_fit;
+                if m.anchored && explains && best.as_ref().is_none_or(|(b, _, _)| m.score > b.score)
+                {
+                    best = Some((m, jins, root));
+                }
+            }
+        }
+        let own_route = best
+            .as_ref()
+            .is_some_and(|(_, jins, root)| own.contains(&(jins.id.as_str(), *root)));
+        if let Some((m, jins, root)) = best.filter(|_| !own_route) {
+            let root = table.get(root as usize);
+            let root_note = SpelledNote::new(root.degree, root.accidental, 4);
+            let centre = spell_step(root_note, &jins.degrees, jins.tonic_step).unwrap_or(root_note);
+            foreign = Some(DetectedJins {
+                jins: jins.id.clone(),
+                root,
+                centre: spelling(centre),
+                fit: m.fit,
+            });
+        }
+    }
+    (active.map(|(_, a)| a), foreign)
+}
+
+/// Cents of a jins's tonal centre above its lowest note.
+fn centre_cents(jins: &Jins) -> f64 {
+    jins.degrees
+        .iter()
+        .find(|d| d.step == jins.tonic_step)
+        .map_or(0.0, |d| d.cents)
 }
 
 #[cfg(test)]
@@ -1110,26 +1905,149 @@ mod tests {
         assert_eq!(r.candidates[0].tonic, sp(Degree::Do, 0), "{r:#?}");
     }
 
+    /// Play `melody` back to back from `t0`, analysing after every note
+    /// the way a live application does; the last analysis.
+    fn play_live(
+        a: &mut MaqamAnalyzer,
+        ds: &MaqamDataset,
+        t0: f64,
+        melody: &[(f64, f64)],
+    ) -> (f64, MaqamAnalysis) {
+        let mut t = t0;
+        let mut last = None;
+        for &(pitch, dur) in melody {
+            a.push(HistoryNote {
+                start_s: t,
+                duration_s: dur,
+                pitch,
+            });
+            t += dur;
+            last = Some(a.analyze(Some(ds), None, t));
+        }
+        (t, last.expect("a melody"))
+    }
+
+    /// Maqam A on Do: up its lower jins, resting on the tonic.
+    const A_LOWER: [(f64, f64); 9] = [
+        (60.0, 0.4),
+        (62.0, 0.4),
+        (63.5, 0.4),
+        (65.0, 0.4),
+        (67.0, 0.6),
+        (65.0, 0.4),
+        (63.5, 0.4),
+        (62.0, 0.4),
+        (60.0, 1.2),
+    ];
+
     #[test]
-    fn modulation_is_flagged_when_halves_disagree() {
-        let mut a = MaqamAnalyzer::new(AnalyzerConfig {
-            min_notes: 5,
-            ..AnalyzerConfig::default()
-        });
-        // First half: maqam A on Do. Second half: maqam B on Re
-        // (0 100 400 500 700 → 62 63 66 67 69).
-        let mut melody: Vec<(f64, f64)> = [60.0, 62.0, 63.5, 65.0, 67.0, 63.5, 60.0]
-            .iter()
-            .map(|&p| (p, 0.5))
-            .collect();
-        melody.extend(
-            [62.0, 63.0, 66.0, 67.0, 69.0, 66.0, 62.0]
-                .iter()
-                .map(|&p| (p, 0.5)),
-        );
-        let end = play(&mut a, 0.0, &melody);
-        let r = a.analyze(Some(&dataset()), None, end);
-        assert!(r.possible_modulation, "{r:#?}");
+    fn a_passage_in_the_upper_jins_is_read_as_that_jins_not_a_modulation() {
+        let ds = dataset();
+        let mut a = analyzer();
+        let mut t = 0.0;
+        for _ in 0..2 {
+            t = play_live(&mut a, &ds, t, &A_LOWER).0;
+        }
+        // Dwell on the upper jins (X on Sol: 67 69 70.5 72), resting on Sol.
+        let upper = [
+            (67.0, 0.4),
+            (69.0, 0.4),
+            (70.5, 0.4),
+            (72.0, 0.6),
+            (70.5, 0.4),
+            (69.0, 0.4),
+            (67.0, 1.0),
+        ];
+        let mut r = None;
+        for _ in 0..3 {
+            let (end, last) = play_live(&mut a, &ds, t, &upper);
+            t = end;
+            r = Some(last);
+        }
+        let r = r.unwrap();
+        assert_eq!(r.candidates[0].maqam, "test-maqam-a", "{r:#?}");
+        assert_eq!(r.candidates[0].tonic, sp(Degree::Do, 0));
+        let active = r.active_jins.as_ref().expect("an active jins");
+        assert_eq!(active.on_step, 4);
+        assert_eq!(active.role, JinsRole::Upper);
+        assert_eq!(active.root, sp(Degree::Sol, 0));
+        assert!(!r.possible_modulation && r.foreign_jins.is_none(), "{r:#?}");
+    }
+
+    #[test]
+    fn a_passage_outside_the_maqam_is_a_possible_modulation() {
+        let ds = dataset();
+        let mut a = analyzer();
+        let mut t = 0.0;
+        for _ in 0..2 {
+            t = play_live(&mut a, &ds, t, &A_LOWER).0;
+        }
+        let (_, before) = play_live(&mut a, &ds, t, &A_LOWER);
+        let active = before.active_jins.as_ref().expect("an active jins");
+        assert_eq!((active.on_step, &active.role), (0, &JinsRole::Lower));
+        t += A_LOWER.iter().map(|n| n.1).sum::<f64>();
+        // Jins Y on Re (0 100 400 500 → 62 63 66 67): not in maqam A.
+        let y = [
+            (62.0, 0.4),
+            (63.0, 0.4),
+            (66.0, 0.4),
+            (67.0, 0.6),
+            (66.0, 0.4),
+            (63.0, 0.4),
+            (62.0, 1.0),
+        ];
+        // A modulation lasts more than one gesture.
+        let (t, _) = play_live(&mut a, &ds, t, &y);
+        let (_, r) = play_live(&mut a, &ds, t, &y);
+        let foreign = r.foreign_jins.as_ref().unwrap_or_else(|| panic!("{r:#?}"));
+        assert_eq!(foreign.jins, "test-jins-y", "{r:#?}");
+        assert_eq!(foreign.root, sp(Degree::Re, 0));
+        assert!(r.possible_modulation);
+    }
+
+    #[test]
+    fn phrase_endings_are_long_tones_or_tones_before_a_pause() {
+        let n = |cents: f64, start: f64, duration: f64| Prepared {
+            cents,
+            weight: duration,
+            start,
+            duration,
+        };
+        // Tremolo on 6200 (three plucks), then a pause; a short 6400; a long
+        // 6000 approached from above.
+        let notes = [
+            n(6500.0, 0.0, 0.3),
+            n(6200.0, 0.3, 0.2),
+            n(6205.0, 0.5, 0.2),
+            n(6198.0, 0.7, 0.2),
+            n(6400.0, 1.5, 0.3),
+            n(6000.0, 1.8, 1.2),
+        ];
+        let c = cadences(&notes, 3.0);
+        assert_eq!(c.len(), 2, "{c:?}");
+        assert!((c[0].cents - 6201.0).abs() < 5.0);
+        assert!((c[1].cents - 6000.0).abs() < 1e-9);
+        assert!(c[1].strength > c[0].strength);
+    }
+
+    #[test]
+    fn register_prefers_the_tonic_at_the_bottom_of_the_melody() {
+        let notes: Vec<Prepared> = [
+            6200.0, 6300.0, 6600.0, 6700.0, 6900.0, 7000.0, 7200.0, 7400.0,
+        ]
+        .iter()
+        .enumerate()
+        .map(|(i, &cents)| Prepared {
+            cents,
+            weight: 0.5,
+            start: i as f64 * 0.5,
+            duration: 0.5,
+        })
+        .collect();
+        let re = register_share(&notes, 200.0, true);
+        let sol = register_share(&notes, 700.0, true);
+        assert!((re - 1.0).abs() < 1e-9);
+        assert!(sol < re - 0.05, "{sol}");
     }
 
     /// Maqam A on Do, ending on the tonic, every pitch shifted by `cents`.
@@ -1319,6 +2237,8 @@ mod tests {
             let mut a = MaqamAnalyzer::new(AnalyzerConfig {
                 weights: ScoreWeights {
                     continuity,
+                    // Only the continuity bonus, without the score history.
+                    memory: 0.0,
                     ..ScoreWeights::default()
                 },
                 ..AnalyzerConfig::default()
