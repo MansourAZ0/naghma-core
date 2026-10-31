@@ -24,7 +24,7 @@ jobs:
       matrix:
         os: [blacksmith-2vcpu-ubuntu-2404, blacksmith-2vcpu-windows-2025]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Authenticate dependencies while repositories are private
         if: github.event.repository.private
         shell: bash
@@ -41,7 +41,7 @@ jobs:
   lint:
     runs-on: blacksmith-2vcpu-ubuntu-2404
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Authenticate dependencies while repositories are private
         if: github.event.repository.private
         env:
@@ -63,7 +63,7 @@ jobs:
       run:
         working-directory: packages/naghma-ui
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Authenticate dependencies while repositories are private
         if: github.event.repository.private
         env:
@@ -80,7 +80,7 @@ jobs:
   msrv:
     runs-on: blacksmith-2vcpu-ubuntu-2404
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Authenticate dependencies while repositories are private
         if: github.event.repository.private
         env:
