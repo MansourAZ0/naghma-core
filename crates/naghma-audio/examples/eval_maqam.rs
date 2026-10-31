@@ -78,6 +78,8 @@ struct ClipResult {
     steps: usize,
     steps_top1: usize,
     steps_top3: usize,
+    /// Analyses flagging a possible modulation.
+    steps_modulation: usize,
     status_counts: BTreeMap<String, usize>,
     first_correct_s: Option<f64>,
     offset_cents: Option<f64>,
@@ -217,6 +219,9 @@ fn evaluate(
             if top_contains(&a, &maqam, 3) {
                 result.steps_top3 += 1;
             }
+            if a.possible_modulation {
+                result.steps_modulation += 1;
+            }
         }
         if verbose {
             let top: Vec<String> = a
@@ -233,8 +238,25 @@ fn evaluate(
                     )
                 })
                 .collect();
+            let jins = a.active_jins.as_ref().map_or(String::new(), |j| {
+                format!(
+                    "  jins {}@{:?}{:+} ({:?})",
+                    j.jins,
+                    j.root.degree,
+                    j.root.accidental.quarter_tones(),
+                    j.role
+                )
+            });
+            let foreign = a.foreign_jins.as_ref().map_or(String::new(), |j| {
+                format!(
+                    "  MODULATION? {}@{:?}{:+}",
+                    j.jins,
+                    j.root.degree,
+                    j.root.accidental.quarter_tones()
+                )
+            });
             println!(
-                "    t={t:6.1} {:<12} off {:+5.1}  {}",
+                "    t={t:6.1} {:<12} off {:+5.1}  {}{jins}{foreign}",
                 status_name(a.status),
                 a.tuning_offset_cents,
                 top.join("  ")
@@ -439,6 +461,7 @@ fn main() -> ExitCode {
     let steps: usize = results.iter().map(|r| r.steps).sum();
     let steps1: usize = results.iter().map(|r| r.steps_top1).sum();
     let steps3: usize = results.iter().map(|r| r.steps_top3).sum();
+    let steps_mod: usize = results.iter().map(|r| r.steps_modulation).sum();
     let tonic_n = sum(&|r| r.tonic_correct.is_some());
     let tonic_ok = sum(&|r| r.tonic_correct == Some(true));
     println!("\n# per maqam: clips  final-top1  final-top3  steps-top1  steps-top3");
@@ -482,6 +505,10 @@ fn main() -> ExitCode {
         pct(steps1, steps),
         pct(steps3, steps),
         pct(tonic_ok, tonic_n),
+    );
+    println!(
+        "# possible modulation flagged in {} of analyses",
+        pct(steps_mod, steps).trim()
     );
     println!(
         "# status share over all analyses: {}",

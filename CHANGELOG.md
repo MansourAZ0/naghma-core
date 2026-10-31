@@ -5,6 +5,44 @@ All notable changes are documented here ([Keep a Changelog](https://keepachangel
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-31
+
+A passage in a maqam's upper jins is now read as that jins, not as another
+maqam. Hijaz on Re and Nahawand on Sol have the same notes; with a 10 s
+window, Hijaz's upper Nahawand used to be ranked maqam Nahawand. Live
+analyses naming the clip's stated maqam: development 55% -> 70%, held-out
+52% -> 73%; every maqam improved on both sets.
+
+### Added
+- Score memory (`ScoreWeights::memory` 0.5, `AnalyzerConfig::memory_s` 60 s,
+  `memory_rise_s` 10 s): each maqam and tonic keeps a decaying score history.
+  It fades slowly while the notes stay in its scale, faster with notes
+  outside it, and is dropped on a confirmed modulation; once the leading
+  maqam is contradicted, a new one takes over within about 14 s (synthetic
+  Bayati -> Hijaz on Re). The tonics of remembered hypotheses stay
+  candidates while a passage never touches them.
+- Phrase-ending evidence (`ScoreWeights::cadence`, `Evidence::Cadence`):
+  long tones, tones before a pause and tremolo on one pitch, stronger when
+  approached from above, resting on the tonic.
+- Register evidence (`ScoreWeights::register`, `Evidence::Register`) and a
+  separate lower-jins term (`ScoreWeights::lower_jins`).
+- `MaqamAnalysis::active_jins` (`ActiveJins`): the leading maqam's jins that
+  the latest `AnalyzerConfig::jins_window_s` (5 s) dwells in, with its role
+  (lower = jins al-asl, upper = second jins), root and tonal centre.
+- `MaqamAnalysis::foreign_jins` (`DetectedJins`): a jins outside every
+  documented route of the leading maqam that explains the latest passage.
+- `eval_maqam`: share of analyses flagging a possible modulation; the active
+  and foreign jins in `--verbose` output.
+
+### Changed
+- **`possible_modulation` now means a confirmed foreign jins** (heard in two
+  analyses in a row), not a disagreement between the window's halves, which
+  fired on every move into an upper jins. It is set in 1-2% of analyses on
+  the evaluation corpus.
+- `MaqamCandidate::score` includes the score history; `ambiguous` results
+  fell from 24% to 13% of analyses (development), 22% to 11% (held-out).
+- `MaqamAnalyzer` keeps more state; `clear` resets all of it.
+
 ## [0.6.0] - 2026-10-28
 
 Maqam ranking now follows the music over 10 s instead of 30 s. Note tracking

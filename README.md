@@ -76,13 +76,13 @@ Windows device behaviour still needs field validation.
 
 ## Use the library
 
-The current Git release is `v0.6.0` (it requires pitchforge `v0.1.1`).
+The current Git release is `v0.7.0` (it requires pitchforge `v0.1.1`).
 Add only the crates you need:
 
 ```toml
 [dependencies]
-naghma-core = { git = "https://github.com/MansourAZ0/naghma-core", tag = "v0.6.0" }
-naghma-audio = { git = "https://github.com/MansourAZ0/naghma-core", tag = "v0.6.0" }
+naghma-core = { git = "https://github.com/MansourAZ0/naghma-core", tag = "v0.7.0" }
+naghma-audio = { git = "https://github.com/MansourAZ0/naghma-core", tag = "v0.7.0" }
 ```
 
 ```rust
@@ -112,9 +112,13 @@ See the [source record](docs/MAQAMAT_RESEARCH.md),
 
 Recognition ranks possible maqamat from recent notes. Scores are heuristics,
 not probabilities, and a pitch set alone does not describe a complete maqam.
-The recorded evaluation reports 63% top-one and 88% top-three accuracy on its
-held-out live analyses; Sikah remains weak. These are historical results from a
-small corpus, not a new measurement or a guarantee. See
+It weighs where phrases come to rest (qaflat) and keeps a fading memory of
+earlier material, so a passage in a maqam's upper jins stays that maqam. Each
+analysis also names the jins the latest passage dwells in (first jins or an
+upper one) and a jins outside the maqam when a modulation may be under way.
+The recorded evaluation reports 73% top-one and 91% top-three accuracy on its
+held-out live analyses; Sikah remains weak. These results come from a small
+corpus whose labels ignore modulation; they are not a guarantee. See
 [evaluation methods, recordings and limitations](docs/EVALUATION.md).
 
 ## Development
