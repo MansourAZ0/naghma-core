@@ -86,6 +86,9 @@ jobs:
         env:
           DEPS_TOKEN: ${{ secrets.DEPS_TOKEN || github.token }}
         run: git config --global url."https://x-access-token:${DEPS_TOKEN}@github.com/".insteadOf "https://github.com/"
-      - uses: dtolnay/rust-toolchain@1.85
+      # Update the action independently of the supported minimum compiler.
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: '1.85'
       - uses: Swatinem/rust-cache@v2
       - run: cargo check -p naghma-core --lib --all-features
