@@ -5,6 +5,8 @@ All notable changes are documented here ([Keep a Changelog](https://keepachangel
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-31
+
 A passage in a maqam's upper jins is now read as that jins, not as another
 maqam. Hijaz on Re and Nahawand on Sol have the same notes; with a 10 s
 window, Hijaz's upper Nahawand used to be ranked maqam Nahawand. Live
@@ -38,7 +40,7 @@ analyses naming the clip's stated maqam: development 55% -> 70%, held-out
   fired on every move into an upper jins. It is set in 1-2% of analyses on
   the evaluation corpus.
 - `MaqamCandidate::score` includes the score history; `ambiguous` results
-  fell from about 35% to 12% of analyses.
+  fell from 24% to 13% of analyses (development), 22% to 11% (held-out).
 - `MaqamAnalyzer` keeps more state; `clear` resets all of it.
 
 ## [0.6.0] - 2026-10-28

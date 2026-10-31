@@ -297,7 +297,7 @@ Nahawand on Sol (Nahawand on Sol + Hijaz on Re) have exactly the same notes.
 | Development (54) | top1 / top3 | 56% / 85% | **70% / 89%** |
 | Held-out (31) | step1 / step3 | 52% / 81% | **73% / 91%** |
 | Held-out (31) | top1 / top3 | 32% / 71% | **55% / 77%** |
-| Both | ambiguous share | ~35% | ~12% |
+| Development / held-out | ambiguous share | 24% / 22% | 13% / 11% |
 | Both | analyses flagging a possible modulation | — | 1–2% (scale demos 1%) |
 
 Per maqam, `step1` (development / held-out): Ajam 71→91% / 65→80%, Bayati
@@ -340,9 +340,9 @@ settle. A fixed tonic (qarar) setting removes the rotation entirely.
   the tonic's placement is inconsistent (see Performed intonation).
 * Most remaining errors are tonic choices between maqamat that share a pitch
   set (Rast/Bayati/Sikah, Kurd/Nahawand/Hijaz on related tonics); 0.7.0's
-  score memory reports far fewer of them as `ambiguous` (about 12% of
-  analyses, from 35%), so a wrong early reading can now persist until the
-  notes contradict it.
+  score memory reports fewer of them as `ambiguous` (13% / 11% of analyses,
+  from 24% / 22%), so a wrong early reading can now persist until the notes
+  contradict it.
 * The active jins is read from pitch classes over 5 s. It names the
   placement that fits best; it does not yet use register to tell a jins
   played below the tonic from the same jins an octave higher.
