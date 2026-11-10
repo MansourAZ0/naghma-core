@@ -46,6 +46,17 @@
 //! [`MaqamAnalysis::foreign_jins`] a jins outside every documented route of
 //! the maqam, a possible modulation.
 //!
+//! ## The performance as a whole
+//!
+//! A taqsim has one maqam it starts from and returns to, however many
+//! passages wander elsewhere. [`MaqamAnalysis::performance`] ranks the
+//! maqamat over everything played since the piece began (up to
+//! [`AnalyzerConfig::performance_window_s`]), without any history blending:
+//! the notes themselves are the history. It answers "which maqam is this
+//! piece in", while [`MaqamAnalysis::candidates`] and the jins readings
+//! answer "what is being played now". A silence longer than
+//! [`AnalyzerConfig::performance_gap_s`] starts a new piece.
+//!
 //! Different maqamat can share most of their notes; when the best scores are
 //! close the result is [`AnalysisStatus::Ambiguous`] rather than a forced
 //! choice, and too little material gives
@@ -93,28 +104,23 @@ pub struct ScoreWeights {
     /// Bonus for the maqam and tonic that led the previous analysis. A
     /// maqam lasts longer than one analysis step, so a near-tie keeps the
     /// current reading instead of flickering; clear evidence still wins.
-    #[serde(default)]
     pub continuity: f64,
     /// Weight of phrase endings (qaflat) resting on the tonic. Phrases come
     /// to rest on the qarar; a dominant (ghammaz) is only a temporary stop.
-    #[serde(default)]
     pub cadence: f64,
     /// Weight of the melody lying in the tonic's register: from a little
     /// below the tonic to a little above its octave. This is what separates
     /// rotations of one pitch set, such as Hijaz on Re and Nahawand on Sol:
     /// the same notes, but a different jins at the bottom.
-    #[serde(default)]
     pub register: f64,
     /// Weight of the completeness of the lower jins (jins al-asl), which
     /// defines the maqam, in addition to [`Self::ajnas`].
-    #[serde(default)]
     pub lower_jins: f64,
     /// Share of a candidate's score taken from its decaying score history
     /// (`0` = only the current window, `1` = only the history). Material
     /// that left the window still counts, fading over
     /// [`AnalyzerConfig::memory_s`], so a passage in an upper jins does not
     /// erase the qarar established before it.
-    #[serde(default)]
     pub memory: f64,
 }
 
@@ -199,6 +205,23 @@ pub struct AnalyzerConfig {
     /// Ajnas are short, so this is much shorter than [`Self::window_s`].
     #[serde(default = "default_jins_window")]
     pub jins_window_s: f64,
+    /// Longest span, seconds, read as one performance for
+    /// [`MaqamAnalysis::performance`]. `0` disables that reading (and keeps
+    /// no notes beyond the other windows).
+    #[serde(default = "default_performance_window")]
+    pub performance_window_s: f64,
+    /// A silence between notes at least this long, seconds, starts a new
+    /// performance: what was played before it no longer counts toward
+    /// [`MaqamAnalysis::performance`].
+    #[serde(default = "default_performance_gap")]
+    pub performance_gap_s: f64,
+    /// Candidates of the performance reading within this margin of the best
+    /// make it ambiguous. Larger than [`Self::ambiguity_margin`] would be
+    /// too cautious here: over minutes, scores of maqamat that share notes
+    /// converge, while their order is far more reliable than in a short
+    /// window.
+    #[serde(default = "default_performance_margin")]
+    pub performance_ambiguity_margin: f64,
 }
 
 impl Default for AnalyzerConfig {
@@ -207,6 +230,9 @@ impl Default for AnalyzerConfig {
             memory_s: default_memory(),
             memory_rise_s: default_memory_rise(),
             jins_window_s: default_jins_window(),
+            performance_window_s: default_performance_window(),
+            performance_gap_s: default_performance_gap(),
+            performance_ambiguity_margin: default_performance_margin(),
             window_s: 10.0,
             tuning_window_s: default_tuning_window(),
             min_notes: 6,
@@ -238,6 +264,18 @@ fn default_memory_rise() -> f64 {
 
 fn default_jins_window() -> f64 {
     5.0
+}
+
+fn default_performance_window() -> f64 {
+    300.0
+}
+
+fn default_performance_gap() -> f64 {
+    20.0
+}
+
+fn default_performance_margin() -> f64 {
+    0.08
 }
 
 /// One note in the analysis history.
@@ -382,6 +420,24 @@ pub struct MaqamCandidate {
     pub contradicting: Vec<Evidence>,
 }
 
+/// The maqam of the performance as a whole: a ranking over everything
+/// played since the piece began, rather than over the latest passage.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PerformanceReading {
+    /// Span read, `[start, end]` in stream seconds.
+    pub window: (f64, f64),
+    /// Notes in the span (after ignoring transients).
+    pub notes: usize,
+    /// Outcome ([`AnalysisStatus::InsufficientData`] is never reported:
+    /// the reading is absent instead).
+    pub status: AnalysisStatus,
+    /// Ranked candidates (best first), one per maqam.
+    pub candidates: Vec<MaqamCandidate>,
+    /// Tuning offset (cents) subtracted from the notes before scoring.
+    pub tuning_offset_cents: f64,
+}
+
 /// Result of [`MaqamAnalyzer::analyze`].
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -412,6 +468,12 @@ pub struct MaqamAnalysis {
     /// passage better than the maqam does.
     #[serde(default)]
     pub foreign_jins: Option<DetectedJins>,
+    /// The maqam of the whole performance so far, once enough of it has
+    /// been heard. Unlike [`Self::candidates`] it does not follow a passage
+    /// into another maqam, and it is still reported while the latest
+    /// passage is too sparse to read ([`AnalysisStatus::InsufficientData`]).
+    #[serde(default)]
+    pub performance: Option<PerformanceReading>,
 }
 
 /// Decaying score of one maqam on one tonic pitch class.
@@ -496,10 +558,15 @@ impl MaqamAnalyzer {
         self.history.push_back(note);
     }
 
-    /// Drop notes that ended before both the maqam window and the tuning
-    /// window.
+    /// Drop notes that ended before the maqam window, the tuning window and
+    /// the performance window.
     pub fn prune(&mut self, now_s: f64) {
-        let cutoff = now_s - self.config.window_s.max(self.config.tuning_window_s);
+        let cutoff = now_s
+            - self
+                .config
+                .window_s
+                .max(self.config.tuning_window_s)
+                .max(self.config.performance_window_s);
         while self
             .history
             .front()
@@ -519,10 +586,19 @@ impl MaqamAnalyzer {
     ) -> MaqamAnalysis {
         self.prune(now_s);
         let config = &{ self.config };
-        let context: Vec<HistoryNote> = self
+        let kept: Vec<HistoryNote> = self
             .history
             .iter()
             .filter(|n| n.duration_s >= config.min_note_s)
+            .copied()
+            .collect();
+        let performance = dataset
+            .filter(|d| !d.maqamat.is_empty())
+            .and_then(|d| read_performance(&kept, d, tonic, now_s, config));
+        let tuning_from = now_s - config.window_s.max(config.tuning_window_s);
+        let context: Vec<HistoryNote> = kept
+            .iter()
+            .filter(|n| n.start_s + n.duration_s >= tuning_from)
             .copied()
             .collect();
         let cutoff = now_s - config.window_s;
@@ -546,6 +622,7 @@ impl MaqamAnalyzer {
             tuning_offset_cents: offset,
             active_jins: None,
             foreign_jins: None,
+            performance,
         };
         let distinct = distinct_classes(&notes);
         if notes.len() < config.min_notes || distinct < config.min_distinct {
@@ -739,6 +816,80 @@ impl MaqamAnalyzer {
         }
         candidates.sort_by(|a, b| b.score.total_cmp(&a.score));
     }
+}
+
+/// The notes of the current performance: those within
+/// [`AnalyzerConfig::performance_window_s`] of `now_s` and after the latest
+/// silence of at least [`AnalyzerConfig::performance_gap_s`].
+fn performance_notes(
+    notes: &[HistoryNote],
+    now_s: f64,
+    config: &AnalyzerConfig,
+) -> Vec<HistoryNote> {
+    let from = now_s - config.performance_window_s;
+    let mut out: Vec<HistoryNote> = notes
+        .iter()
+        .filter(|n| n.start_s + n.duration_s >= from)
+        .copied()
+        .collect();
+    out.sort_by(|a, b| a.start_s.total_cmp(&b.start_s));
+    if config.performance_gap_s > 0.0 {
+        let mut end = f64::NEG_INFINITY;
+        let mut first = 0;
+        for (i, n) in out.iter().enumerate() {
+            if i > 0 && n.start_s - end >= config.performance_gap_s {
+                first = i;
+            }
+            end = end.max(n.start_s + n.duration_s);
+        }
+        out.drain(..first);
+    }
+    out
+}
+
+/// Rank the maqamat over the whole performance (see
+/// [`MaqamAnalysis::performance`]). `None` while disabled or too little has
+/// been played.
+fn read_performance(
+    notes: &[HistoryNote],
+    dataset: &MaqamDataset,
+    tonic: Option<NoteSpelling>,
+    now_s: f64,
+    config: &AnalyzerConfig,
+) -> Option<PerformanceReading> {
+    if config.performance_window_s <= 0.0 {
+        return None;
+    }
+    let raw = performance_notes(notes, now_s, config);
+    let offset = config.tuning_offset_cents.unwrap_or_else(|| {
+        estimate_tuning_offset(&raw, config.max_tuning_offset_cents).unwrap_or(0.0)
+    });
+    let prepared = prepare(&raw, offset);
+    if prepared.len() < config.min_notes || distinct_classes(&prepared) < config.min_distinct {
+        return None;
+    }
+    let tonics = tonic.map_or_else(|| candidate_tonics(&prepared), |t| vec![t]);
+    let mut candidates = rank_all(&prepared, now_s, dataset, &tonics, config);
+    dedup_by_maqam(&mut candidates);
+    let best = candidates.first().map_or(0.0, |c| c.score);
+    let status = if best < config.min_score {
+        AnalysisStatus::Unknown
+    } else if candidates
+        .get(1)
+        .is_some_and(|c| best - c.score <= config.performance_ambiguity_margin)
+    {
+        AnalysisStatus::Ambiguous
+    } else {
+        AnalysisStatus::Likely
+    };
+    candidates.truncate(config.max_candidates);
+    Some(PerformanceReading {
+        window: (prepared.first().map_or(now_s, |n| n.start), now_s),
+        notes: prepared.len(),
+        status,
+        candidates,
+        tuning_offset_cents: offset,
+    })
 }
 
 /// Share of a candidate's played time outside its scale.
@@ -1748,6 +1899,23 @@ mod tests {
     const A_ON_DO: [f64; 8] = [60.0, 62.0, 63.5, 65.0, 67.0, 69.0, 70.5, 72.0];
 
     #[test]
+    fn partial_weights_keep_the_other_defaults() {
+        // A field-level `serde(default)` would read a missing weight as 0.
+        let w: ScoreWeights = serde_json::from_str(r#"{"tonic":0.5}"#).unwrap();
+        assert_eq!(
+            w,
+            ScoreWeights {
+                tonic: 0.5,
+                ..ScoreWeights::default()
+            }
+        );
+        let c: AnalyzerConfig = serde_json::from_str(r#"{"weights":{"fit":2.0}}"#).unwrap();
+        assert_eq!(c.weights.memory, ScoreWeights::default().memory);
+        assert_eq!(c.weights.cadence, ScoreWeights::default().cadence);
+        assert_eq!(c.performance_window_s, default_performance_window());
+    }
+
+    #[test]
     fn insufficient_data_is_reported() {
         let mut a = analyzer();
         let end = play(&mut a, 0.0, &[(60.0, 0.5), (62.0, 0.5), (63.5, 0.5)]);
@@ -1986,16 +2154,7 @@ mod tests {
         let active = before.active_jins.as_ref().expect("an active jins");
         assert_eq!((active.on_step, &active.role), (0, &JinsRole::Lower));
         t += A_LOWER.iter().map(|n| n.1).sum::<f64>();
-        // Jins Y on Re (0 100 400 500 → 62 63 66 67): not in maqam A.
-        let y = [
-            (62.0, 0.4),
-            (63.0, 0.4),
-            (66.0, 0.4),
-            (67.0, 0.6),
-            (66.0, 0.4),
-            (63.0, 0.4),
-            (62.0, 1.0),
-        ];
+        let y = Y_ON_RE;
         // A modulation lasts more than one gesture.
         let (t, _) = play_live(&mut a, &ds, t, &y);
         let (_, r) = play_live(&mut a, &ds, t, &y);
@@ -2003,6 +2162,124 @@ mod tests {
         assert_eq!(foreign.jins, "test-jins-y", "{r:#?}");
         assert_eq!(foreign.root, sp(Degree::Re, 0));
         assert!(r.possible_modulation);
+    }
+
+    /// Jins Y on Re (0 100 400 500 → 62 63 66 67): not in maqam A.
+    const Y_ON_RE: [(f64, f64); 7] = [
+        (62.0, 0.4),
+        (63.0, 0.4),
+        (66.0, 0.4),
+        (67.0, 0.6),
+        (66.0, 0.4),
+        (63.0, 0.4),
+        (62.0, 1.0),
+    ];
+
+    #[test]
+    fn the_performance_keeps_its_maqam_through_a_passage_elsewhere() {
+        let ds = dataset();
+        let mut a = analyzer();
+        let mut t = 0.0;
+        for _ in 0..8 {
+            t = play_live(&mut a, &ds, t, &A_LOWER).0;
+        }
+        let mut r = None;
+        for _ in 0..4 {
+            let (end, last) = play_live(&mut a, &ds, t, &Y_ON_RE);
+            t = end;
+            r = Some(last);
+        }
+        let r = r.unwrap();
+        // The latest passage has left maqam A ...
+        assert_eq!(r.candidates[0].maqam, "test-maqam-b", "{r:#?}");
+        // ... the performance as a whole has not.
+        let p = r.performance.as_ref().expect("a performance reading");
+        assert_eq!(p.candidates[0].maqam, "test-maqam-a", "{p:#?}");
+        assert_eq!(p.candidates[0].tonic, sp(Degree::Do, 0));
+        assert_eq!(p.status, AnalysisStatus::Likely);
+        assert!(p.notes > r.notes);
+        assert!(p.window.0 < r.window.0);
+    }
+
+    #[test]
+    fn the_performance_is_still_read_while_the_latest_passage_is_too_sparse() {
+        let ds = dataset();
+        let mut a = analyzer();
+        let mut t = 0.0;
+        for _ in 0..3 {
+            t = play_live(&mut a, &ds, t, &A_LOWER).0;
+        }
+        // Twelve seconds of silence: nothing in the window, same piece.
+        let r = a.analyze(Some(&ds), None, t + 12.0);
+        assert_eq!(r.status, AnalysisStatus::InsufficientData);
+        assert!(r.candidates.is_empty());
+        let p = r.performance.expect("a performance reading");
+        assert_eq!(p.candidates[0].maqam, "test-maqam-a");
+        assert_eq!(p.window.1, t + 12.0);
+    }
+
+    #[test]
+    fn a_long_silence_starts_a_new_performance() {
+        let ds = dataset();
+        let mut a = analyzer();
+        let mut t = 0.0;
+        for _ in 0..3 {
+            t = play_live(&mut a, &ds, t, &A_LOWER).0;
+        }
+        // Still the same piece until something new is played.
+        let waiting = a.analyze(Some(&ds), None, t + 25.0);
+        assert!(waiting.performance.is_some());
+        // The first notes after the silence do not make a reading yet ...
+        let (t, r) = play_live(&mut a, &ds, t + 25.0, &Y_ON_RE[..3]);
+        assert!(r.performance.is_none(), "{r:#?}");
+        // ... and the new piece is read on its own.
+        let (t, _) = play_live(&mut a, &ds, t, &Y_ON_RE);
+        let (_, r) = play_live(&mut a, &ds, t, &Y_ON_RE);
+        let p = r.performance.expect("a performance reading");
+        assert_eq!(p.candidates[0].maqam, "test-maqam-b", "{p:#?}");
+        assert!(p.window.0 >= 25.0);
+    }
+
+    #[test]
+    fn the_performance_reading_can_be_switched_off() {
+        let ds = dataset();
+        let mut a = MaqamAnalyzer::new(AnalyzerConfig {
+            performance_window_s: 0.0,
+            ..AnalyzerConfig::default()
+        });
+        let mut t = 0.0;
+        let mut r = None;
+        for _ in 0..20 {
+            let (end, last) = play_live(&mut a, &ds, t, &A_LOWER);
+            t = end;
+            r = Some(last);
+        }
+        assert!(r.unwrap().performance.is_none());
+        // Nothing older than the tuning window is kept.
+        let oldest = a.history().next().unwrap();
+        assert!(oldest.start_s + oldest.duration_s >= t - a.config().tuning_window_s);
+    }
+
+    #[test]
+    fn the_performance_window_bounds_the_history() {
+        let ds = dataset();
+        let mut a = MaqamAnalyzer::new(AnalyzerConfig {
+            performance_window_s: 90.0,
+            ..AnalyzerConfig::default()
+        });
+        let mut t = 0.0;
+        let mut r = None;
+        for _ in 0..40 {
+            let (end, last) = play_live(&mut a, &ds, t, &A_LOWER);
+            t = end;
+            r = Some(last);
+        }
+        let p = r.unwrap().performance.unwrap();
+        assert!(
+            p.window.0 >= t - 90.0 - 1.2 && p.window.0 > 60.0,
+            "{:?}",
+            p.window
+        );
     }
 
     #[test]

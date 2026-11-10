@@ -329,6 +329,54 @@ more, with 70–87% of phrase endings on it: plausibly the common Hijaz
 modulation to Nahawand on its fourth, which only time-stamped labels can
 settle. A fixed tonic (qarar) setting removes the rotation entirely.
 
+## The performance as a whole (unreleased)
+
+Every label in the corpus names the maqam of a whole piece, and that is
+also what a player asks first: which maqam is this taqsim in? A ten-second
+window answers a different question (what is being played now) and follows
+every passage into a related maqam. `MaqamAnalysis::performance` ranks the
+maqamat over everything played since the piece began, up to
+`performanceWindowS` (300 s), with the same evidence terms and no score
+memory. A silence of `performanceGapS` (20 s) between notes starts a new
+piece. The ten-second reading, the active jins and the modulation flag are
+unchanged.
+
+The 60-second corpus cannot show a longer horizon, so the same recordings
+were also evaluated at full length (`full.wav` beside each segment:
+165 minutes development, 136 minutes held-out), labels unchanged.
+
+| Set | Reading | top1 | step1 |
+| --- | --- | --- | --- |
+| Development, 60 s clips (54) | ten-second window | 70% | 70% |
+| Development, 60 s clips (54) | performance | **87%** | **79%** |
+| Held-out, 60 s clips (31) | ten-second window | 55% | 73% |
+| Held-out, 60 s clips (31) | performance | **90%** | **81%** |
+| Development, full recordings (54) | ten-second window | 57% | 63% |
+| Development, full recordings (54) | performance | **91%** | **87%** |
+| Held-out, full recordings (31) | ten-second window | 55% | 55% |
+| Held-out, full recordings (31) | performance | **84%** | **72%** |
+
+The performance reading is `likely` in 70% / 58% of its readings on the
+full recordings (development / held-out) and then right in 96% / 89%.
+
+Nothing was fitted for it. On the development full recordings, horizons of
+120 / 300 / 600 s / unbounded gave step1 79% / 87% / 87% / 87%; gaps of 0,
+10, 20 and 40 s were identical; and fifteen single-weight changes (evidence
+weights lowered, raised or removed, one at a time) moved step1 between 84%
+and 88%, except adding the final-rest term at 0.2 (79%). It costs about 5 ms per analysis at 300 s on an Apple M2.
+
+Found on the way: `ScoreWeights` read a missing `memory`, `continuity`,
+`cadence`, `register` or `lowerJins` as 0 when only some weights were given
+in JSON. They now keep their defaults. Ablations that passed a partial
+`weights` object to `--config` before this fix switched those five terms
+off together.
+
+`crates/naghma-audio/examples/dump_notes.rs` prints the notes tracked in a
+recording, or with `--frames` a per-second count of voiced, aperiodic and
+silent frames. It showed that the 33 seconds without notes at the start of
+one 1955 recording are steady, aperiodic sound at −22 dB (not music the
+detector misses).
+
 ## Limits
 
 * Labels are whatever the uploader wrote. Taqasim modulate; a 60-second

@@ -5,6 +5,28 @@ All notable changes are documented here ([Keep a Changelog](https://keepachangel
 
 ## [Unreleased]
 
+### Added
+- `MaqamAnalysis::performance` (`PerformanceReading`): the maqam of the
+  piece as a whole, ranked over everything played since it began (up to
+  `AnalyzerConfig::performance_window_s`, 300 s; a silence of
+  `performance_gap_s`, 20 s, starts a new piece). It does not follow a
+  passage into another maqam and is still reported while the latest window
+  is too sparse to read. Naming the stated maqam at the end of a recording:
+  development 57% -> 91% and held-out 55% -> 84% on full-length recordings
+  (60 s clips: 70% -> 87% and 55% -> 90%), against the ten-second reading,
+  which is unchanged. See docs/EVALUATION.md.
+- `eval_maqam` reports the performance reading; `dump_notes` example.
+
+### Fixed
+- A partial `weights` object in JSON read the missing `memory`,
+  `continuity`, `cadence`, `register` and `lowerJins` as 0 instead of their
+  defaults.
+
+### Changed
+- `MaqamAnalyzer` keeps notes for the performance window (about 5 ms more
+  per analysis at 300 s). Set `performance_window_s` to 0 for the previous
+  behaviour.
+
 ## [0.7.0] - 2026-10-31
 
 A passage in a maqam's upper jins is now read as that jins, not as another
