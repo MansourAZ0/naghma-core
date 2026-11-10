@@ -5,6 +5,8 @@ All notable changes are documented here ([Keep a Changelog](https://keepachangel
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-10
+
 ### Added
 - `MaqamAnalysis::performance` (`PerformanceReading`): the maqam of the
   piece as a whole, ranked over everything played since it began (up to

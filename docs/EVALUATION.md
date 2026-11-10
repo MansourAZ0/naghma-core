@@ -329,7 +329,7 @@ more, with 70–87% of phrase endings on it: plausibly the common Hijaz
 modulation to Nahawand on its fourth, which only time-stamped labels can
 settle. A fixed tonic (qarar) setting removes the rotation entirely.
 
-## The performance as a whole (unreleased)
+## The performance as a whole (0.8.0)
 
 Every label in the corpus names the maqam of a whole piece, and that is
 also what a player asks first: which maqam is this taqsim in? A ten-second

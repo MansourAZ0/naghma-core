@@ -76,13 +76,13 @@ Windows device behaviour still needs field validation.
 
 ## Use the library
 
-The current Git release is `v0.7.0` (it requires pitchforge `v0.1.1`).
+The current Git release is `v0.8.0` (it requires pitchforge `v0.1.1`).
 Add only the crates you need:
 
 ```toml
 [dependencies]
-naghma-core = { git = "https://github.com/MansourAZ0/naghma-core", tag = "v0.7.0" }
-naghma-audio = { git = "https://github.com/MansourAZ0/naghma-core", tag = "v0.7.0" }
+naghma-core = { git = "https://github.com/MansourAZ0/naghma-core", tag = "v0.8.0" }
+naghma-audio = { git = "https://github.com/MansourAZ0/naghma-core", tag = "v0.8.0" }
 ```
 
 ```rust
