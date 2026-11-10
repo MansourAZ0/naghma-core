@@ -78,6 +78,16 @@ struct ClipResult {
     steps: usize,
     steps_top1: usize,
     steps_top3: usize,
+    /// The performance reading's best candidate is the stated maqam at the
+    /// end of the clip.
+    performance_top1: bool,
+    /// Analyses with a performance reading, and those whose best candidate
+    /// is the stated maqam.
+    performance_steps: usize,
+    performance_steps_top1: usize,
+    /// ... of which are reported as likely, and of those, correct.
+    performance_likely: usize,
+    performance_likely_top1: usize,
     /// Analyses flagging a possible modulation.
     steps_modulation: usize,
     status_counts: BTreeMap<String, usize>,
@@ -210,6 +220,15 @@ fn evaluate(
             .status_counts
             .entry(status_name(a.status).into())
             .or_default() += 1;
+        if let Some(p) = &a.performance {
+            let right = p.candidates.first().is_some_and(|c| c.maqam == maqam);
+            result.performance_steps += 1;
+            result.performance_steps_top1 += usize::from(right);
+            if p.status == AnalysisStatus::Likely {
+                result.performance_likely += 1;
+                result.performance_likely_top1 += usize::from(right);
+            }
+        }
         if a.status != AnalysisStatus::InsufficientData {
             result.steps += 1;
             if top_contains(&a, &maqam, 1) {
@@ -277,6 +296,11 @@ fn evaluate(
         t += interval;
     }
     if let Some(a) = last {
+        result.performance_top1 = a
+            .performance
+            .as_ref()
+            .and_then(|p| p.candidates.first())
+            .is_some_and(|c| c.maqam == maqam);
         result.final_top1 = top_contains(&a, &maqam, 1);
         result.final_top3 = top_contains(&a, &maqam, 3);
         result.final_status = Some(a.status);
@@ -505,6 +529,28 @@ fn main() -> ExitCode {
         pct(steps1, steps),
         pct(steps3, steps),
         pct(tonic_ok, tonic_n),
+    );
+    let p_steps: usize = results.iter().map(|r| r.performance_steps).sum();
+    let p_likely: usize = results.iter().map(|r| r.performance_likely).sum();
+    let all_steps: usize = results
+        .iter()
+        .map(|r| r.status_counts.values().sum::<usize>())
+        .sum();
+    println!(
+        "# PERFORMANCE reading: final top-1 {} ({}/{n}), steps top-1 {}, read in {} of analyses; likely in {} of readings, of which right {}",
+        pct(sum(&|r| r.performance_top1), n),
+        sum(&|r| r.performance_top1),
+        pct(
+            results.iter().map(|r| r.performance_steps_top1).sum(),
+            p_steps
+        ),
+        pct(p_steps, all_steps).trim(),
+        pct(p_likely, p_steps).trim(),
+        pct(
+            results.iter().map(|r| r.performance_likely_top1).sum(),
+            p_likely
+        )
+        .trim(),
     );
     println!(
         "# possible modulation flagged in {} of analyses",
