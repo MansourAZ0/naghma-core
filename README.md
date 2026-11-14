@@ -146,4 +146,3 @@ by the available history. Arabic music interpretation and oud support live here.
 See [credits](CREDITS.md) and [third-party notices](THIRD_PARTY_NOTICES.md).
 
 Project code: [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.
-Read the [release guide](docs/OPEN_SOURCE.md) before publishing source or binaries.
