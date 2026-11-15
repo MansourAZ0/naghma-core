@@ -22,7 +22,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [blacksmith-2vcpu-ubuntu-2404, blacksmith-2vcpu-windows-2025]
+        os: [ubuntu-latest, windows-latest]
     steps:
       - uses: actions/checkout@v7
       - name: Authenticate dependencies while repositories are private
@@ -39,7 +39,7 @@ jobs:
       - run: cargo test --workspace --all-features
 
   lint:
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - name: Authenticate dependencies while repositories are private
@@ -58,7 +58,7 @@ jobs:
 
   ui:
     name: "@naghma/ui"
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: packages/naghma-ui
@@ -78,7 +78,7 @@ jobs:
       - run: npm audit --audit-level=high
 
   msrv:
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - name: Authenticate dependencies while repositories are private
