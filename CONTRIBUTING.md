@@ -34,11 +34,11 @@ changing shared code. With Cargo, place optional overrides in the consuming
 repository's ignored `.cargo/config.toml`:
 
 ```toml
-[patch."https://github.com/MansourAZ0/naghma-core"]
+[patch."https://github.com/MansourAz0-org/naghma-core"]
 naghma-core = { path = "../naghma-core/crates/naghma-core" }
 naghma-audio = { path = "../naghma-core/crates/naghma-audio" }
 
-[patch."https://github.com/MansourAZ0/pitchforge-rs"]
+[patch."https://github.com/MansourAz0-org/pitchforge-rs"]
 pitchforge = { path = "../pitchforge-rs" }
 ```
 
