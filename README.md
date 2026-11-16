@@ -19,9 +19,9 @@ music tradition.
 | [`naghma-audio`](crates/naghma-audio) | Microphone capture and a background analysis worker. Also supports simulation and offline audio. | Optional |
 | [`@naghma/ui`](packages/naghma-ui) | React note labels, quarter-tone symbols, a tuning meter and live display helpers. | No |
 
-The audio worker uses [pitchforge-rs](https://github.com/MansourAZ0/pitchforge-rs)
-for pitch detection. [Watar](https://github.com/MansourAZ0/watar-tuner) and
-[Ajnas](https://github.com/MansourAZ0/Ajnas) use these packages independently;
+The audio worker uses [pitchforge-rs](https://github.com/MansourAz0-org/pitchforge-rs)
+for pitch detection. [Watar](https://github.com/MansourAz0-org/watar-tuner) and
+[Ajnas](https://github.com/MansourAz0-org/Ajnas) use these packages independently;
 neither application depends on the other.
 
 ```text
@@ -57,7 +57,7 @@ Install current stable Rust. Linux microphone builds also need ALSA headers
 (`libasound2-dev` on Debian/Ubuntu).
 
 ```sh
-git clone https://github.com/MansourAZ0/naghma-core.git
+git clone https://github.com/MansourAz0-org/naghma-core.git
 cd naghma-core
 cargo test --workspace --locked
 cargo run --release -p naghma-audio --example listen -- 10 --simulate
@@ -81,8 +81,8 @@ Add only the crates you need:
 
 ```toml
 [dependencies]
-naghma-core = { git = "https://github.com/MansourAZ0/naghma-core", tag = "v0.8.0" }
-naghma-audio = { git = "https://github.com/MansourAZ0/naghma-core", tag = "v0.8.0" }
+naghma-core = { git = "https://github.com/MansourAz0-org/naghma-core", tag = "v0.8.0" }
+naghma-audio = { git = "https://github.com/MansourAz0-org/naghma-core", tag = "v0.8.0" }
 ```
 
 ```rust

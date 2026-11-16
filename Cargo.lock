@@ -499,7 +499,7 @@ checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 [[package]]
 name = "pitchforge"
 version = "0.1.1"
-source = "git+https://github.com/MansourAZ0/pitchforge-rs?tag=v0.1.1#80c884282b6cc60aecd9686989d391e3fd4022e2"
+source = "git+https://github.com/MansourAz0-org/pitchforge-rs?tag=v0.1.1#80c884282b6cc60aecd9686989d391e3fd4022e2"
 dependencies = [
  "realfft",
 ]
