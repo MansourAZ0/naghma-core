@@ -391,11 +391,11 @@ mod tests {
         let p = InstrumentProfile::oud_6_course_example();
         let map = p.fingerboard_map(&crate::tuning::EqualTemperament::edo24());
         // 300 mm of a 600 mm string = one octave = 24 quarter-tones + open.
-        for course in 0..6 {
+        for (course, string) in p.courses.iter().enumerate().take(6) {
             let on_course: Vec<_> = map.iter().filter(|m| m.position.course == course).collect();
             assert_eq!(on_course.len(), 25, "course {course}");
             assert!(on_course[0].position.is_open());
-            assert_eq!(on_course[0].note, p.courses[course].open);
+            assert_eq!(on_course[0].note, string.open);
         }
         // Re4 is reachable on the Re3, Sol3 and Do4 courses.
         let re4: Vec<usize> = map
